@@ -1167,17 +1167,17 @@ POST /api/execute { code, language, testCases[], problemSlug? }
 
 ```bash
 # Set all these environment variables in your Railway/Render service dashboard:
-NODE_ENV=production
+NODE_ENV=
 PORT=5000
-MONGO_URI=<Atlas M10+ connection string>
-JWT_SECRET=<64-char hex>
-JWT_REFRESH_SECRET=<64-char hex>
-FRONTEND_URL=https://peercode.yourdomain.com
-GEMINI_KEY_1=<key>
-JUDGE0_BASE_URL=https://ce.judge0.com
-RAZORPAY_KEY_ID=rzp_live_xxx
-RAZORPAY_KEY_SECRET=xxx
-RAZORPAY_WEBHOOK_SECRET=xxx
+MONGO_URI=
+JWT_SECRET=
+JWT_REFRESH_SECRET=
+FRONTEND_URL=
+GEMINI_KEY_1=
+JUDGE0_BASE_URL=
+RAZORPAY_KEY_ID=
+RAZORPAY_KEY_SECRET=
+RAZORPAY_WEBHOOK_SECRET=
 
 # Start command
 node server.js
@@ -1250,7 +1250,7 @@ curl https://api.yourdomain.com/api/health
 
 ```bash
 # Fork, then clone your fork
-git clone https://github.com/<your-username>/peercode.git
+git clone https://github.com/GJBarhate/peercode.git
 cd peercode
 
 # Create a branch — prefix matters
@@ -1278,32 +1278,6 @@ git push origin feat/redis-matching-queue
 
 ---
 
-## 🗺️ Roadmap
-
-- [x] Real-time collaborative Monaco editor via Yjs CRDT over Socket.IO binary transport
-- [x] WebRTC peer-to-peer video/audio with 3-STUN ICE and Socket.IO signaling relay
-- [x] ELO-based peer matching queue with role + topic filtering and 60s timeout
-- [x] Judge0 CE sandboxed code execution for 7 languages with test harness wrapper
-- [x] Google Gemini Flash AI: contextual hints, code analysis, DSA question generation, post-session debriefs
-- [x] Razorpay subscription tiers (Free/Pro/Premium/Ultra) with HMAC-SHA256 webhook verification
-- [x] Session replay with line-level diffs, approach-restart detection, pause segment analytics
-- [x] Agenda MongoDB-backed job scheduler for debriefs, emails, and weekly digest
-- [x] Admin panel with subscription revenue analytics (MRR, ARR, conversion rate)
-- [ ] Redis-backed matching queue + Socket.IO Redis adapter for multi-instance horizontal scaling
-- [ ] Per-IP rate limiting on `/api/auth/login` to block credential stuffing
-- [ ] Email verification on registration (SMTP + token link)
-- [ ] Forgot password / password reset flow
-- [ ] TURN server integration for WebRTC on symmetric NAT networks (relay fallback)
-- [ ] Push notifications: match found, session invite, weekly streak digest
-- [ ] Mobile-responsive layout (currently optimized for desktop)
-- [ ] Self-hosted Judge0 CE instance for production SLA guarantees
-- [ ] Whiteboard / drawing canvas for system design interview rounds
-- [ ] Interview scheduling with Google Calendar invites via OAuth
-- [ ] GitHub OAuth login alongside existing email/password
-- [ ] Export session debrief as downloadable PDF
-- [ ] Problem difficulty voting (user-sourced acceptance rate corrections)
-
----
 
 <div align="center">
 
@@ -1311,12 +1285,11 @@ git push origin feat/redis-matching-queue
 
 <br/>
 
-Built with ☕ and too many late nights by **[Gaurav Barhate](https://github.com/gauravbarhate)**
+Built with ☕ and too many late nights by **[Gaurav Barhate](https://github.com/GJBarhate)**
 
 <br/>
 
-[![GitHub Profile](https://img.shields.io/badge/GitHub-gauravbarhate-6d28d9?style=for-the-badge&logo=github&logoColor=white)](https://github.com/gauravbarhate)
-[![Made in India](https://img.shields.io/badge/Made%20in-India%20🇮🇳-FF9933?style=for-the-badge)](https://github.com/gauravbarhate)
+[![GitHub Profile](https://img.shields.io/badge/GitHub-gauravbarhate-6d28d9?style=for-the-badge&logo=github&logoColor=white)](https://github.com/GJBarhate)
 
 <br/>
 
