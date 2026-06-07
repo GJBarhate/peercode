@@ -472,7 +472,7 @@ mongod --version  # Requires 7.x locally — OR use a free MongoDB Atlas cluster
 ### Step 2 — Clone & Install
 
 ```bash
-git clone https://github.com/gauravbarhate/peercode.git
+git clone https://github.com/GJBarhate/peercode.git
 cd peercode
 
 # Backend dependencies
