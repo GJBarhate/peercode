@@ -12,7 +12,7 @@ import toast from 'react-hot-toast'
 const PLAN_NAMES = { free: 'Free', pro: 'Pro', premium: 'Premium', ultra: 'Ultra Premium' }
 
 const ACHIEVEMENTS = [
-  { id: 'first_session', label: 'First Session', desc: 'Complete one interview session', icon: Award, req: s => s >= 1 },
+  { id: 'first_session', label: 'First Session', desc: 'Complete one practice or interview session', icon: Award, req: s => s >= 1 },
   { id: 'week_warrior', label: 'Week Warrior', desc: 'Build a 7-day streak', icon: Flame, req: (_, streak) => streak >= 7 },
   { id: 'rising_star', label: 'Rising Star', desc: 'Reach ELO 1300', icon: Star, req: (__, ___, elo) => elo >= 1300 },
   { id: 'expert', label: 'Expert', desc: 'Reach ELO 1500', icon: ShieldCheck, req: (__, ___, elo) => elo >= 1500 },

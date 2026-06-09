@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
-import { googleAuth } from '../services/api'
+import axios from 'axios'
+import { API_BASE_URL, setAccessToken as setApiToken } from '../services/api'
+import { useAuth } from '../context/AuthContext'
 import toast from 'react-hot-toast'
 
 export default function AuthCallbackPage() {
   const [searchParams] = useSearchParams()
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
+  const { setAccessToken, setUser } = useAuth()
 
   useEffect(() => {
     let cancelled = false
@@ -31,8 +34,15 @@ export default function AuthCallbackPage() {
       }
 
       try {
-        await googleAuth(code)
+        const { data } = await axios.post(
+          `${API_BASE_URL}/auth/google`,
+          { code },
+          { withCredentials: true }
+        )
         if (!cancelled) {
+          setAccessToken(data.accessToken)
+          setUser(data.user)
+          setApiToken(data.accessToken)
           setStatus('success')
         }
         toast.success('Welcome to PeerCode!')
@@ -47,7 +57,7 @@ export default function AuthCallbackPage() {
     handleCallback()
 
     return () => { cancelled = true }
-  }, [searchParams])
+  }, [searchParams, setAccessToken, setUser])
 
   if (status === 'loading') {
     return (

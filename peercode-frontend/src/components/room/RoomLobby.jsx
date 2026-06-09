@@ -129,10 +129,10 @@ export default function RoomLobby({ roomId, onJoin, isLoading, error = null }) {
             <div className="flex gap-3 justify-center">
               <button
                 onClick={toggleMute}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium border transition-colors ${
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
                   isMuted
-                    ? 'bg-red-900/30 border-red-700 text-red-400'
-                    : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
+                    ? 'bg-red-900/30 border-red-700 text-red-400 hover:bg-red-900/40'
+                    : 'bg-sky-900/20 border-sky-700/40 text-sky-400 hover:bg-sky-900/30 hover:border-sky-600/60 shadow-sm shadow-sky-500/10'
                 }`}
               >
                 {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
@@ -140,10 +140,10 @@ export default function RoomLobby({ roomId, onJoin, isLoading, error = null }) {
               </button>
               <button
                 onClick={toggleVideo}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium border transition-colors ${
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
                   isVideoOff
-                    ? 'bg-red-900/30 border-red-700 text-red-400'
-                    : 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700'
+                    ? 'bg-red-900/30 border-red-700 text-red-400 hover:bg-red-900/40'
+                    : 'bg-sky-900/20 border-sky-700/40 text-sky-400 hover:bg-sky-900/30 hover:border-sky-600/60 shadow-sm shadow-sky-500/10'
                 }`}
               >
                 {isVideoOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}

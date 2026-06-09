@@ -113,17 +113,17 @@ export default function HomePage() {
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-20">
           <div className="grid lg:grid-cols-12 gap-16 items-center">
             <div className="lg:col-span-7">
-              <div className="inline-flex items-center gap-2 bg-indigo-900/30 border border-indigo-800/50 rounded-full px-4 py-1.5 mb-6">
-                <span className="text-indigo-300 text-sm font-medium">⚡ Real-Time Interview Practice</span>
+              <div className="inline-flex items-center gap-2 bg-sky-900/30 border border-sky-800/50 rounded-full px-4 py-1.5 mb-6">
+                <span className="text-sky-300 text-sm font-medium">⚡ Collaborative Coding & Interview Practice</span>
               </div>
               <h1 className="text-5xl lg:text-6xl font-black text-gray-100 leading-tight mb-6">
-                Practice Technical{' '}
-                <span className="gradient-underline">Interviews</span>{' '}
-                in Real-Time
+                Solve Problems &{' '}
+                <span className="gradient-underline">Ace Interviews</span>{' '}
+                with Real-Time Collaboration
               </h1>
               <p className="text-lg text-gray-400 mb-8 leading-relaxed">
-                Pair up with another developer, write code together in a shared editor, 
-                and get AI-powered hints. Build the skills and confidence you need to land your dream job.
+                Practice algorithms solo using our built-in editor, or pair up with a partner 
+                for a mock interview with live coding, video chat, and AI-powered feedback.
               </p>
               <div className="flex flex-wrap gap-4">
                 <Link
@@ -346,8 +346,8 @@ export default function HomePage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
         <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-3">Everything you need to ace interviews</h2>
-          <p className="text-gray-600 dark:text-gray-400">Professional-grade tools designed for serious interview prep</p>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-3">Practice coding & ace your interviews</h2>
+          <p className="text-gray-600 dark:text-gray-400">Solve problems solo or with a partner — real-time collaboration, AI feedback, and structured learning tracks</p>
         </div>
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
           {features.map(({ icon: Icon, title, desc, color, bg }) => (

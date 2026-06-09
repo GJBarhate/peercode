@@ -137,7 +137,7 @@ export default function SubscriptionPage() {
           <div className="text-center mb-12">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-sm font-medium mb-6">
               <Sparkles className="w-4 h-4" />
-              AI-powered interview prep
+              AI-powered coding & interview prep
             </div>
             <h1 className="text-5xl font-black text-gray-900 dark:text-gray-100 mb-4">
               Choose Your{' '}

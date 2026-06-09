@@ -1,13 +1,26 @@
+<div align="center">
+
+# ⚡ PeerCode
+
+### *Real-Time Collaborative Coding & Interview Practice Platform*
+
+Solve algorithms solo or paired with a partner — live code editor, WebRTC video chat, AI-powered debriefs, and structured learning tracks.
+
+</div>
+
+---
 
 ## 🖥️ Platform Preview
 
 <div align="center">
 
-| Collaborative Editor | Mock Interview Room | AI-Powered Debrief |
+| Collaborative Editor | Interview Room | AI-Powered Debrief |
+|:---:|:---:|:---:|
+| *Monaco editor with live Yjs CRDT sync, remote cursor overlays, 7-language selector* | *Three-panel layout: problem description · live editor · WebRTC video tiles* | *Post-session scores: communication, code quality, complexity, overall readiness* |
 |:---:|:---:|:---:|
 | *Monaco editor with live Yjs CRDT sync, remote cursor overlays, 7-language selector* | *Three-panel layout: problem description · live editor · WebRTC video tiles* | *Post-session scores: communication, code quality, complexity, overall readiness* |
 
-| ELO Dashboard | Peer Matching Queue | Session Playback |
+| ELO Dashboard | Matching Queue | Session Playback |
 |:---:|:---:|:---:|
 | *GitHub-style contribution heatmap, ELO trend AreaChart, streak counter* | *Role + topic selector, live queue position with wait estimate, partner ELO* | *Timeline scrubber with line-level diff replay, approach-restart detection, analytics* |
 
@@ -33,7 +46,7 @@
 
 <div align="center">
 
-### Core Interview Features
+### Core Platform Features
 
 </div>
 
@@ -73,14 +86,14 @@ Judge0 CE sandbox runs code against visible and hidden test cases. A custom `wra
 
 **🎯 ELO-Based Peer Matching**
 
-In-memory Socket.IO queue matches users within ±200 ELO points, filtered by preferred role (interviewer / interviewee / either) and topic tag. Queue positions update every 5 seconds; users timeout after 60 seconds. ELO uses K-factor 32 with per-session modifiers for problem difficulty and session duration.
+In-memory Socket.IO queue matches users within ±200 ELO points, filtered by preferred role (interviewer / interviewee / either) and topic tag. Queue positions update every 5 seconds; users timeout after 60 seconds — great for both mock interviews and collaborative practice sessions.
 
 </td>
 <td width="33%" align="center">
 
 **📊 AI Post-Session Debrief**
 
-After every session, an Agenda background job triggers Gemini to generate a structured debrief: communication (1–5), problem decomposition (1–5), code quality (1–5), complexity analysis (1–5), and an overall interview readiness score (1–10). The debrief includes what went well, areas to improve, and personalized study topic recommendations.
+After every practice session or interview, an Agenda background job triggers Gemini to generate a structured debrief: communication (1–5), problem decomposition (1–5), code quality (1–5), complexity analysis (1–5), and an overall readiness score (1–10). The debrief includes what went well, areas to improve, and personalized study topic recommendations.
 
 </td>
 </tr>

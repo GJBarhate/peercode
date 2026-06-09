@@ -273,7 +273,7 @@ export default function InterviewTimer({ isInterviewer, onPhaseChange, onTimerEn
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-8 max-w-sm w-full mx-4 text-center shadow-2xl">
             <AlertCircle className="w-12 h-12 text-green-400 mx-auto mb-4" />
             <h3 className="text-xl font-bold text-gray-100 mb-2">Time is up!</h3>
-            <p className="text-gray-400 text-sm mb-6">The interview timer has completed.</p>
+            <p className="text-gray-400 text-sm mb-6">The session timer has completed.</p>
             <div className="flex gap-3 justify-center">
               <button
                 onClick={() => setShowEndOverlay(false)}
