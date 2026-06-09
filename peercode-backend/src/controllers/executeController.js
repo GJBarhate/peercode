@@ -4,7 +4,7 @@ const axios = require('axios');
 const { fail } = require('../utils/httpResponse');
 const logger = require('../utils/logger');
 const Problem = require('../models/Problem');
-const { getLanguageId, extractFunctionName, wrapCodeForTest } = require('../utils/executeHelpers');
+const { getLanguageId, extractFunctionName, wrapCodeForTest, buildCodeFromHarness } = require('../utils/executeHelpers');
 
 const JUDGE0_URL = 'https://ce.judge0.com/submissions';
 
@@ -14,12 +14,41 @@ function normalizeOutput(output) {
   catch (_) { return trimmed.replace(/\s+/g, ' ').trim(); }
 }
 
+function arrayNormalize(s) {
+  return s.trim().replace(/\s/g, '').replace(/\[|\]/g, '').split(',').map(Number).sort((a,b)=>a-b).join(',');
+}
+
 function outputsMatch(actual, expected) {
   const a = (actual || '').trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const e = (expected || '').trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   if (a === e) return true;
-  try { return normalizeOutput(a) === normalizeOutput(e); }
-  catch (_) { return a.replace(/\s+/g, '') === e.replace(/\s+/g, ''); }
+  try { return normalizeOutput(a) === normalizeOutput(e); } catch (_) {}
+  try { return arrayNormalize(a) === arrayNormalize(e); } catch (_) {}
+  return a.replace(/\s+/g, '') === e.replace(/\s+/g, '');
+}
+
+async function executeWithRetry(url, data, retries = 3) {
+  let lastError;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await axios.post(url, data, { timeout: 15000, headers: { 'Content-Type': 'application/json' } });
+    } catch (e) {
+      lastError = e;
+      if (e.code === 'ECONNABORTED' || e.message?.includes('timeout')) {
+        if (attempt < retries) {
+          const delay = Math.pow(2, attempt - 1) * 1000;
+          logger.info(`Judge0 timeout (attempt ${attempt}/${retries}), retrying in ${delay}ms...`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+      } else if (e.response?.status === 429 && attempt < retries) {
+        await new Promise(r => setTimeout(r, 3000));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastError;
 }
 
 async function simpleExecute(req, res) {
@@ -29,20 +58,9 @@ async function simpleExecute(req, res) {
     if (!language) return fail(res, 400, 'Language is required');
     let languageId; try { languageId = getLanguageId(language); } catch (e) { return fail(res, 400, e.message); }
     logger.info(`Simple execute: ${language} (ID: ${languageId})`);
-    let response;
-    try {
-      response = await axios.post(`${JUDGE0_URL}?wait=true&base64_encoded=false`, {
-        source_code: code, language_id: languageId, stdin: stdin || '', cpu_time_limit: 5, memory_limit: 131072
-      }, { timeout: 15000, headers: { 'Content-Type': 'application/json' } });
-    } catch (e) {
-      if (e.code === 'ECONNABORTED' || e.message?.includes('timeout')) {
-        logger.info('Judge0 timeout, retrying...');
-        await new Promise(r => setTimeout(r, 3000));
-        response = await axios.post(`${JUDGE0_URL}?wait=true&base64_encoded=false`, {
-          source_code: code, language_id: languageId, stdin: stdin || '', cpu_time_limit: 5, memory_limit: 131072
-        }, { timeout: 15000, headers: { 'Content-Type': 'application/json' } });
-      } else throw e;
-    }
+    const response = await executeWithRetry(`${JUDGE0_URL}?wait=true&base64_encoded=false`, {
+      source_code: code, language_id: languageId, stdin: stdin || '', cpu_time_limit: 5, memory_limit: 131072
+    });
     const executionTime = response.data.time ? parseFloat(response.data.time) * 1000 : 0;
     const output = (response.data.stdout || '').trim();
     const statusId = response.data.status?.id;
@@ -71,31 +89,46 @@ async function executeCode(req, res) {
     }
     for (const tc of testCases) if (tc.input === undefined || tc.expectedOutput === undefined) return fail(res, 400, 'Each test case must have input and expectedOutput');
 
+    let problem = null;
+    try {
+      if (problemId) problem = await Problem.findById(problemId).select('starterCode testHarness');
+      else if (problemSlug) problem = await Problem.findOne({ slug: problemSlug }).select('starterCode testHarness');
+    } catch (e) { logger.warn('Could not fetch problem:', e.message); }
+
+    const harness = problem?.testHarness?.[language];
+    const hasHarness = !!harness;
+
     let functionName = null;
     try {
-      let problem = null;
-      if (problemId) problem = await Problem.findById(problemId).select('starterCode');
-      else if (problemSlug) problem = await Problem.findOne({ slug: problemSlug }).select('starterCode');
       if (problem?.starterCode) {
         functionName = extractFunctionName(problem.starterCode, language);
       }
-    } catch (e) { logger.warn('Could not fetch problem for function name:', e.message); }
+    } catch (e) { logger.warn('Could not extract function name:', e.message); }
     const hasSolutionClass = code.includes('class Solution');
     if (!functionName && problemSlug) functionName = problemSlug.split('-').map((p,i)=>i===0?p:p[0].toUpperCase()+p.slice(1)).join('');
     if (!functionName) functionName = 'solution';
 
-    logger.info(`Executing code with Judge0 for ${language} (ID: ${languageId}) with ${testCases.length} test cases, function: ${functionName}`);
+    logger.info(`Executing ${hasHarness ? 'with harness' : 'with generic wrapper'} for ${language} (ID: ${languageId}), ${testCases.length} test cases`);
 
     const results = [];
     for (let i = 0; i < testCases.length; i++) {
       const tc = testCases[i];
-      const wrappedCode = wrapCodeForTest(code, language, functionName, hasSolutionClass);
       const testInput = tc.input || '';
+
+      let sourceCode, stdinToSend;
+      if (hasHarness) {
+        sourceCode = buildCodeFromHarness(problem, language, code, testInput);
+        stdinToSend = '';
+      } else {
+        sourceCode = wrapCodeForTest(code, language, functionName, hasSolutionClass);
+        stdinToSend = testInput;
+      }
+
       try {
         const startTime = Date.now();
-        const response = await axios.post(`${JUDGE0_URL}?wait=true&base64_encoded=false`, {
-          source_code: wrappedCode, language_id: languageId, stdin: testInput, cpu_time_limit: 5, memory_limit: 131072
-        }, { timeout: 15000, headers: { 'Content-Type': 'application/json' } });
+        const response = await executeWithRetry(`${JUDGE0_URL}?wait=true&base64_encoded=false`, {
+          source_code: sourceCode, language_id: languageId, stdin: stdinToSend, cpu_time_limit: 5, memory_limit: 131072
+        });
         const executionTime = Date.now() - startTime;
         const actualOutput = (response.data.stdout || '').trim();
         const expectedOutput = (tc.expectedOutput || '').trim();

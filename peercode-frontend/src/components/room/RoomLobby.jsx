@@ -164,12 +164,12 @@ export default function RoomLobby({ roomId, onJoin, isLoading, error = null }) {
                   onClick={() => setRole(value)}
                   className={`w-full flex items-start gap-3 p-4 rounded-xl border transition-all text-left ${
                     role === value
-                      ? `bg-${color}-900/20 border-${color}-700`
+                      ? color === 'amber' ? 'bg-amber-900/20 border-amber-700' : 'bg-indigo-900/20 border-indigo-700'
                       : 'bg-gray-800/50 border-gray-700 hover:border-gray-600'
                   }`}
                 >
                   <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                    role === value ? `bg-${color}-700` : 'bg-gray-700'
+                    role === value ? (color === 'amber' ? 'bg-amber-700' : 'bg-indigo-700') : 'bg-gray-700'
                   }`}>
                     <Icon className="w-4 h-4 text-white" />
                   </div>
@@ -193,25 +193,28 @@ export default function RoomLobby({ roomId, onJoin, isLoading, error = null }) {
               <button
                 onClick={handleJoin}
                 disabled={isLoading}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm bg-indigo-600 hover:bg-indigo-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm bg-indigo-600 hover:bg-indigo-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-indigo-600/20"
               >
                 {isLoading ? <Spinner size="sm" /> : <ArrowRight className="w-4 h-4" />}
                 {isLoading ? 'Joining...' : 'Join Room'}
               </button>
-              <button
-                onClick={copyRoomLink}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700 transition-colors"
-              >
-                {linkCopied ? <Check className="w-4 h-4 text-green-400" /> : <LinkIcon className="w-4 h-4" />}
-                {linkCopied ? 'Link Copied!' : 'Copy Room Link'}
-              </button>
-              <button
-                onClick={() => setShowShareModal(true)}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium bg-green-900/30 hover:bg-green-900/50 text-green-400 border border-green-700/50 transition-colors"
-              >
-                <Share2 className="w-4 h-4" />
-                Share Room
-              </button>
+              <div className="flex gap-2 justify-center pt-1">
+                <button
+                  onClick={copyRoomLink}
+                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  {linkCopied ? <Check className="w-3 h-3 text-green-400" /> : <LinkIcon className="w-3 h-3" />}
+                  {linkCopied ? 'Copied!' : 'Copy link'}
+                </button>
+                <span className="text-gray-700">·</span>
+                <button
+                  onClick={() => setShowShareModal(true)}
+                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  <Share2 className="w-3 h-3" />
+                  Share invite
+                </button>
+              </div>
             </div>
           </div>
         </div>

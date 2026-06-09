@@ -111,6 +111,7 @@ export function useYjsEditor(roomId, socket, editorRef, onStuckDetected) {
       ydocRef.current?.destroy()
       ydocRef.current = null
       ytextRef.current = null
+      boundEditor.current = false
     }
   }, [])
 

@@ -45,13 +45,16 @@ async function getProblems(req, res) {
 }
 
 async function getProblem(req, res) {
-  const problem = await Problem.findOne({ slug: req.params.slug, isActive: true }).select(
-    '-hiddenTests'
-  );
+  const { slug } = req.params
+  const isObjectId = /^[0-9a-fA-F]{24}$/.test(slug)
+  const query = isObjectId
+    ? { $or: [{ slug }, { _id: slug }], isActive: true }
+    : { slug, isActive: true }
+  const problem = await Problem.findOne(query).select('-hiddenTests')
   if (!problem) {
-    return fail(res, 404, 'Problem not found');
+    return fail(res, 404, 'Problem not found')
   }
-  res.json(problem);
+  res.json(problem)
 }
 
 async function createProblem(req, res) {

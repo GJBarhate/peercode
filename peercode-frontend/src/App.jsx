@@ -7,6 +7,7 @@ import Spinner from './components/common/Spinner'
 
 const HomePage = lazy(() => import('./pages/HomePage'))
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const AuthCallbackPage = lazy(() => import('./pages/AuthCallbackPage'))
 const RoomPage = lazy(() => import('./pages/RoomPage'))
 const ProblemsPage = lazy(() => import('./pages/ProblemsPage'))
 const ProblemDetailPage = lazy(() => import('./pages/ProblemDetailPage'))
@@ -87,6 +88,7 @@ export default function App() {
       }>
         <Routes>
           <Route path="/" element={<E><HomePage /></E>} />
+          <Route path="/auth/callback" element={<E><AuthCallbackPage /></E>} />
           <Route path="/problems" element={<E><ProblemsPage /></E>} />
           <Route path="/problems/:slug" element={<E><ProblemDetailPage /></E>} />
           <Route path="/tracks" element={<E><TracksPage /></E>} />

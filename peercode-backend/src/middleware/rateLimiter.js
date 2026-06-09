@@ -2,6 +2,16 @@
 
 const rateLimit = require('express-rate-limit');
 
+// Auth limiter - stricter limits for authentication endpoints
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: process.env.NODE_ENV === 'development' ? 100 : 10, // More lenient in dev
+  keyGenerator: (req) => req.ip,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many authentication attempts. Please try again later.' },
+});
+
 // General limiter - for public endpoints
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -53,4 +63,4 @@ const executeLimiter = rateLimit({
   message: { error: 'Execution rate limit exceeded. Max 30 requests per minute.' },
 });
 
-module.exports = { generalLimiter, dashboardLimiter, apiLimiter, userGeminiLimiter, executeLimiter };
+module.exports = { authLimiter, generalLimiter, dashboardLimiter, apiLimiter, userGeminiLimiter, executeLimiter };

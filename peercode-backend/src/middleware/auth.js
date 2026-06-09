@@ -13,7 +13,8 @@ async function auth(req, res, next) {
   const token = authHeader.slice(7);
   try {
     const decoded = verifyToken(token);
-    const user = await User.findById(decoded.id).select('-passwordHash');
+    // Select only essential fields for authorization to reduce DB load
+    const user = await User.findById(decoded.id).select('_id username email role subscription elo usage');
     if (!user) {
       return fail(res, 401, 'User not found');
     }

@@ -1,20 +1,26 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { BookOpen, Clock, ChevronRight, CheckCircle2 } from 'lucide-react'
+import { BookOpen, Clock, ChevronRight, CheckCircle2, Target, Sparkles, BarChart3, Search, TrendingUp } from 'lucide-react'
 import Navbar from '../components/common/Navbar'
 import ErrorState from '../components/common/ErrorState'
 import Skeleton from '../components/common/Skeleton'
+import CompanyLogo from '../components/common/CompanyLogo'
+import { NoTracksIllustration } from '../components/common/EmptyStateIllustrations'
 import { getTracks, getAllTracksProgress, getTrackProgress } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 
-const COMPANY_STYLES = {
-  Amazon: { bg: 'bg-amber-700', text: 'text-white', initial: 'A' },
-  Google: { bg: 'bg-blue-700', text: 'text-white', initial: 'G' },
-  Meta: { bg: 'bg-blue-600', text: 'text-white', initial: 'M' },
-  Apple: { bg: 'bg-gray-700', text: 'text-white', initial: 'Ap' },
-  Microsoft: { bg: 'bg-green-700', text: 'text-white', initial: 'Ms' },
-  default: { bg: 'bg-indigo-700', text: 'text-white', initial: '?' }
+const COMPANY_GRADIENTS = {
+  Amazon: 'from-amber-600/20 to-amber-800/10 border-amber-700/20 hover:border-amber-600/40',
+  Google: 'from-blue-600/20 to-blue-800/10 border-blue-700/20 hover:border-blue-600/40',
+  Meta: 'from-blue-600/20 to-indigo-800/10 border-blue-700/20 hover:border-blue-600/40',
+  Apple: 'from-gray-600/20 to-gray-800/10 border-gray-700/20 hover:border-gray-600/40',
+  Microsoft: 'from-green-600/20 to-green-800/10 border-green-700/20 hover:border-green-600/40',
+  Netflix: 'from-red-600/20 to-red-800/10 border-red-700/20 hover:border-red-600/40',
+  Uber: 'from-gray-600/20 to-gray-800/10 border-gray-700/20 hover:border-gray-600/40',
+  default: 'from-indigo-600/20 to-purple-800/10 border-indigo-700/20 hover:border-indigo-600/40',
 }
+
+const DIFF_COLORS = { easy: 'bg-emerald-500', medium: 'bg-amber-500', hard: 'bg-red-500' }
 
 export default function TracksPage() {
   const { user } = useAuth()
@@ -23,6 +29,7 @@ export default function TracksPage() {
   const [progressMap, setProgressMap] = useState({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
   async function load() {
     setIsLoading(true)
@@ -31,25 +38,18 @@ export default function TracksPage() {
       const { data } = await getTracks()
       const trackList = data.tracks || data || []
       setTracks(trackList)
-
       if (user) {
         try {
           const { data: progressData } = await getAllTracksProgress()
           const map = {}
           const list = Array.isArray(progressData) ? progressData : []
-          for (const item of list) {
-            map[item.slug] = item
-          }
+          for (const item of list) { map[item.slug] = item }
           setProgressMap(map)
         } catch {
-          const progressResults = await Promise.allSettled(
-            trackList.map(t => getTrackProgress(t.slug))
-          )
+          const results = await Promise.allSettled(trackList.map(t => getTrackProgress(t.slug)))
           const map = {}
           trackList.forEach((t, i) => {
-            if (progressResults[i].status === 'fulfilled') {
-              map[t.slug] = progressResults[i].value.data
-            }
+            if (results[i].status === 'fulfilled') map[t.slug] = results[i].value.data
           })
           setProgressMap(map)
         }
@@ -61,18 +61,23 @@ export default function TracksPage() {
     }
   }
 
-  useEffect(() => {
-    load()
-  }, [user])
+  useEffect(() => { load() }, [user])
+
+  const filteredTracks = useMemo(() => {
+    if (!searchQuery.trim()) return tracks
+    const q = searchQuery.toLowerCase()
+    return tracks.filter(t => t.name?.toLowerCase().includes(q) || t.company?.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q))
+  }, [tracks, searchQuery])
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-950">
         <Navbar />
         <div className="max-w-6xl mx-auto px-4 pt-24 pb-16">
-          <Skeleton className="h-10 w-48 mb-8" />
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1,2,3,4,5,6].map(i => <Skeleton key={i} className="h-48" />)}
+          <Skeleton className="h-10 w-48 mb-3" />
+          <Skeleton className="h-5 w-80 mb-8" />
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {[1,2,3,4,5,6].map(i => <Skeleton key={i} className="h-56" />)}
           </div>
         </div>
       </div>
@@ -83,12 +88,7 @@ export default function TracksPage() {
     return (
       <div className="min-h-screen bg-gray-950">
         <Navbar />
-        <ErrorState
-          error={error}
-          title="Failed to Load Tracks"
-          onRetry={load}
-          onGoHome={() => navigate('/dashboard')}
-        />
+        <ErrorState error={error} title="Failed to Load Tracks" onRetry={load} onGoHome={() => navigate('/dashboard')} />
       </div>
     )
   }
@@ -97,19 +97,48 @@ export default function TracksPage() {
     <div className="min-h-screen bg-gray-950">
       <Navbar />
       <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-24 pb-16">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-100 mb-2">Learning Tracks</h1>
-          <p className="text-gray-400">Structured problem sets to master company-specific interview patterns</p>
+        {/* Hero Header */}
+        <div className="relative overflow-hidden rounded-2xl border border-gray-800 bg-gradient-to-br from-gray-900 via-gray-900 to-indigo-950/30 p-6 sm:p-8 mb-8">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-600/5 rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-64 h-64 bg-purple-600/5 rounded-full blur-3xl" />
+          <div className="relative">
+            <div className="flex items-center gap-3 mb-3">
+              <Sparkles className="w-6 h-6 text-indigo-400" />
+              <h1 className="text-3xl sm:text-4xl font-bold text-white">Learning Tracks</h1>
+            </div>
+            <p className="text-gray-400 text-sm sm:text-base max-w-2xl">Structured problem sets curated by company and topic to master interview patterns step by step</p>
+            <div className="flex flex-wrap items-center gap-4 mt-4 text-xs text-gray-600">
+              <span className="flex items-center gap-1.5"><BarChart3 className="w-3.5 h-3.5 text-indigo-400" />{tracks.length} tracks available</span>
+              <span className="flex items-center gap-1.5"><Target className="w-3.5 h-3.5 text-emerald-400" />{tracks.filter(t => t.company).length} company-specific</span>
+            </div>
+          </div>
         </div>
 
-        {tracks.length === 0 ? (
+        {/* Search */}
+        <div className="relative mb-6">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" />
+          <input type="text" placeholder="Search tracks by name, company, or description..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-3 bg-gray-900 border border-gray-800 rounded-xl text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500/50 transition-all" />
+        </div>
+
+        {filteredTracks.length === 0 ? (
           <div className="text-center py-16">
-            <p className="text-gray-500">No tracks available yet.</p>
+            {searchQuery ? (
+              <>
+                <Search className="w-10 h-10 text-gray-700 mx-auto mb-3" />
+                <p className="text-gray-500 text-sm">No tracks match your search</p>
+              </>
+            ) : (
+              <>
+                <NoTracksIllustration />
+                <p className="text-gray-500 mt-4">No tracks available yet.</p>
+              </>
+            )}
           </div>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {tracks.map(track => {
-              const style = COMPANY_STYLES[track.company] || COMPANY_STYLES.default
+            {filteredTracks.map((track) => {
+              const gradient = COMPANY_GRADIENTS[track.company] || COMPANY_GRADIENTS.default
               const progress = progressMap[track.slug]
               const completed = progress ? (typeof progress.completedProblems === 'number' ? progress.completedProblems : (progress.completedProblems?.length || 0)) : 0
               const total = progress?.totalProblems || track.problemCount || track.problems?.length || 0
@@ -117,80 +146,59 @@ export default function TracksPage() {
               const isComplete = pct >= 100
 
               return (
-                <div
-                  key={track._id || track.slug}
-                  className="bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-2xl p-5 flex flex-col gap-4 transition-colors"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`w-12 h-12 ${style.bg} rounded-xl flex items-center justify-center text-sm font-bold ${style.text} flex-shrink-0`}>
-                      {track.company?.[0] || style.initial}
-                    </div>
+                <Link key={track._id || track.slug} to={`/tracks/${track.slug}`}
+                  className={`group relative overflow-hidden rounded-2xl border bg-gradient-to-br from-gray-900 to-gray-950 p-5 flex flex-col gap-4 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-indigo-600/5 ${gradient}`}>
+                  
+                  {/* Hover shine effect */}
+                  <div className="absolute -inset-full top-0 w-1/2 h-full bg-gradient-to-r from-transparent via-white/[0.02] to-transparent group-hover:translate-x-full transition-transform duration-700" />
+
+                  <div className="relative flex items-start gap-3">
+                    <CompanyLogo company={track.company} size="w-12 h-12" />
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-100 leading-tight">{track.name}</h3>
-                      {track.company && <p className="text-xs text-gray-500 mt-0.5">{track.company}</p>}
+                      <h3 className="font-bold text-white group-hover:text-indigo-300 transition-colors leading-tight">{track.name}</h3>
+                      {track.company && (
+                        <span className="inline-flex items-center gap-1 mt-1 text-[11px] font-semibold uppercase tracking-wider text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20">
+                          {track.company}
+                        </span>
+                      )}
                     </div>
+                    <ChevronRight className="w-5 h-5 text-gray-700 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all flex-shrink-0 mt-1" />
                   </div>
 
                   {track.description && (
-                    <p className="text-sm text-gray-400 leading-relaxed line-clamp-2">{track.description}</p>
+                    <p className="relative text-sm text-gray-400 leading-relaxed line-clamp-2">{track.description}</p>
                   )}
 
-                  <div className="flex items-center gap-3 text-xs text-gray-500">
-                    <span className="flex items-center gap-1">
-                      <BookOpen className="w-3.5 h-3.5" />
-                      {total} problems
-                    </span>
-                    {track.estimatedHours && (
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" />
-                        {track.estimatedHours}h estimated
-                      </span>
-                    )}
+                  <div className="relative flex items-center gap-3 text-xs text-gray-500">
+                    <span className="flex items-center gap-1.5"><BookOpen className="w-3.5 h-3.5 text-gray-600" />{total} problems</span>
+                    {track.estimatedHours && <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-gray-600" />{track.estimatedHours}h</span>}
                   </div>
 
                   {user && total > 0 && (
-                    <div>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-gray-500">{completed}/{total} completed</span>
-                        <span className="text-gray-500">{Math.round(pct)}%</span>
+                    <div className="relative">
+                      <div className="flex items-center justify-between text-xs mb-1.5">
+                        <span className="text-gray-500 font-medium">{completed}/{total} <span className="text-gray-600">completed</span></span>
+                        <span className={`font-semibold ${isComplete ? 'text-emerald-400' : 'text-indigo-400'}`}>{Math.round(pct)}%</span>
                       </div>
-                      <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-500 ${
-                            isComplete ? 'bg-green-500' : 'bg-indigo-500'
-                          }`}
-                          style={{ width: `${pct}%` }}
-                        />
+                      <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all duration-700 ease-out ${isComplete ? 'bg-gradient-to-r from-emerald-500 to-green-500' : 'bg-gradient-to-r from-indigo-500 to-purple-500'}`}
+                          style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   )}
 
-                  <Link
-                    to={`/tracks/${track.slug}`}
-                    className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-                      isComplete
-                        ? 'bg-green-600 hover:bg-green-500 text-white'
-                        : 'bg-indigo-600 hover:bg-indigo-500 text-white'
-                    }`}
-                  >
-                    {isComplete ? (
-                      <>
-                        <CheckCircle2 className="w-4 h-4" />
-                        View Track
-                      </>
-                    ) : user && completed > 0 ? (
-                      <>
-                        Continue Track
-                        <ChevronRight className="w-4 h-4" />
-                      </>
-                    ) : (
-                      <>
-                        Start Track
-                        <ChevronRight className="w-4 h-4" />
-                      </>
-                    )}
-                  </Link>
-                </div>
+                  <div className={`relative flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${
+                    isComplete
+                      ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-600/30 group-hover:bg-emerald-600/30'
+                      : user && completed > 0
+                        ? 'bg-indigo-600/90 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20'
+                        : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20'
+                  }`}>
+                    {isComplete ? <><CheckCircle2 className="w-4 h-4" /> Completed</>
+                      : user && completed > 0 ? <><TrendingUp className="w-4 h-4" /> Continue <ChevronRight className="w-4 h-4" /></>
+                      : <><Sparkles className="w-4 h-4" /> Start Track <ChevronRight className="w-4 h-4" /></>}
+                  </div>
+                </Link>
               )
             })}
           </div>

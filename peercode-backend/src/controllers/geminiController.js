@@ -39,6 +39,12 @@ async function checkUsageAndCall(req, res, feature, promptBuilder) {
     return { result, useOwnKey, unlimited: useOwnKey };
   } catch (err) {
     logger.error(`Gemini ${feature} error:`, err);
+    // Preserve error type for differentiation upstream
+    if (err.message?.includes('429') || err.status === 429 || err.message?.includes('quota')) {
+      err._rateLimit = true;
+    } else if (err.message?.includes('key') || err.message?.includes('API_KEY')) {
+      err._keyError = true;
+    }
     throw err;
   }
 }
@@ -70,6 +76,12 @@ Be thorough and helpful - provide multiple paragraphs if needed to give real val
     const usageInfo = getUsageInfo(req.user);
     res.json({ hint, usage: usageInfo, unlimited });
   } catch (err) {
+    if (err._rateLimit) {
+      return fail(res, 429, 'Rate limit exceeded. Please wait before trying again.');
+    }
+    if (err._keyError) {
+      return fail(res, 502, 'AI service key error. Please check your API key or try again later.');
+    }
     fail(res, 502, 'Failed to get hint. Please try again.');
   }
 }
@@ -123,6 +135,12 @@ Be thorough and helpful. Explain WHY each issue matters and HOW to fix it.`;
     const usageInfo = getUsageInfo(req.user);
     res.json({ ...sections, usage: usageInfo, unlimited });
   } catch (err) {
+    if (err._rateLimit) {
+      return fail(res, 429, 'Rate limit exceeded. Please wait before trying again.');
+    }
+    if (err._keyError) {
+      return fail(res, 502, 'AI service key error. Please check your API key or try again later.');
+    }
     fail(res, 502, 'Failed to analyze code. Please try again.');
   }
 }

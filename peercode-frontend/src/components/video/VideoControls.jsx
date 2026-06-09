@@ -1,6 +1,6 @@
 import { Mic, MicOff, Video, VideoOff, PhoneOff, Monitor } from 'lucide-react'
 
-export default function VideoControls({ isMuted, isVideoOff, onToggleMute, onToggleVideo, onHangUp, onScreenShare }) {
+export default function VideoControls({ isMuted, isVideoOff, isSharing, onToggleMute, onToggleVideo, onHangUp, onScreenShare }) {
   return (
     <div className="flex items-center gap-3 p-3 bg-gray-900 rounded-2xl border border-gray-800" role="toolbar" aria-label="Video controls">
       <button
@@ -34,9 +34,13 @@ export default function VideoControls({ isMuted, isVideoOff, onToggleMute, onTog
       {onScreenShare && (
         <button
           onClick={onScreenShare}
-          className="p-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-950"
-          title="Share screen"
-          aria-label="Share screen"
+          className={`p-3 rounded-xl transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-950 ${
+            isSharing
+              ? 'bg-green-600 hover:bg-green-500 text-white focus:ring-green-500'
+              : 'bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white focus:ring-indigo-500'
+          }`}
+          title={isSharing ? 'Stop sharing screen' : 'Share screen'}
+          aria-label={isSharing ? 'Stop sharing screen' : 'Share screen'}
         >
           <Monitor className="w-5 h-5" />
         </button>

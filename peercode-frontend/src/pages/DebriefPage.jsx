@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { CheckCircle2, AlertTriangle, ArrowLeft, RotateCcw, BookOpen, Lightbulb, Clock, Cpu } from 'lucide-react'
+import { CheckCircle2, AlertTriangle, ArrowLeft, RotateCcw, BookOpen, Lightbulb, Clock, Cpu, TrendingUp } from 'lucide-react'
 import Navbar from '../components/common/Navbar'
 import Skeleton from '../components/common/Skeleton'
-import { getDebrief } from '../services/api'
+import { getDebrief, generateDebrief, getSession } from '../services/api'
 
 const MAX_RETRIES = 5
 const POLL_INTERVAL = 10000
@@ -68,16 +68,25 @@ export default function DebriefPage() {
 
   async function load() {
     if (!roomId) return
+    setError(null)
+    setIsLoading(true)
     try {
       const response = await getDebrief(roomId)
       const debriefData = response.data?.data || response.data
       setDebrief(debriefData)
-      setError(null)
       setIsLoading(false)
       setIsRetrying(false)
       clearInterval(retryIntervalRef.current)
     } catch (err) {
       if (err.response?.status === 404) {
+        // Debrief not ready — trigger generation if not already triggered
+        try {
+          const sessionRes = await getSession(roomId)
+          const sessionId = sessionRes.data?._id || sessionRes.data?.data?._id
+          if (sessionId) {
+            await generateDebrief(sessionId)
+          }
+        } catch (_) {}
         setIsRetrying(true)
         setIsLoading(false)
         return
@@ -90,12 +99,11 @@ export default function DebriefPage() {
 
   useEffect(() => {
     if (roomId) {
-      const initialDelay = setTimeout(() => load(), 2000)
+      load()
       retryIntervalRef.current = setInterval(() => {
         setRetryCount(c => c + 1)
       }, POLL_INTERVAL)
       return () => {
-        clearTimeout(initialDelay)
         if (retryIntervalRef.current) clearInterval(retryIntervalRef.current)
       }
     }
@@ -136,23 +144,36 @@ export default function DebriefPage() {
     return (
       <div className="min-h-screen bg-[#0a0a14]">
         <Navbar />
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-24 pb-16 space-y-6">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-44 w-full" />
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[1,2,3,4].map(i => <Skeleton key={i} className="h-28" />)}
-          </div>
-          <div className="grid md:grid-cols-2 gap-4">
-            <Skeleton className="h-48" />
-            <Skeleton className="h-48" />
-          </div>
-          <div className="flex flex-col items-center gap-3 pt-2">
-            {isRetrying && (
-              <p className="text-xs text-[#5a5a72] animate-pulse">Generating AI debrief... this may take up to a minute</p>
-            )}
-            <button onClick={load} className="flex items-center gap-2 text-sm text-[#6d4df2] hover:text-[#7c5ff5]">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-24 pb-16">
+          <div className="flex flex-col items-center justify-center min-h-[50vh] gap-6">
+            <div className="relative w-20 h-20">
+              <div className="absolute inset-0 border-2 border-indigo-500/30 rounded-full animate-ping" />
+              <div className="absolute inset-2 border-2 border-indigo-500/20 rounded-full animate-ping" style={{ animationDelay: '0.3s' }} />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <RotateCcw className="w-8 h-8 text-indigo-400 animate-spin" />
+              </div>
+            </div>
+            <div className="text-center">
+              <h2 className="text-xl font-bold text-gray-200 mb-2">Generating Your Debrief</h2>
+              <p className="text-sm text-gray-500 max-w-md">
+                {isRetrying
+                  ? 'AI is analyzing your session performance... this may take up to a minute'
+                  : 'Initializing debrief generation...'}
+              </p>
+              {isRetrying && (
+                <p className="text-xs text-gray-600 mt-2">
+                  Attempt {Math.min(retryCount + 1, MAX_RETRIES)}/{MAX_RETRIES} &middot; polling every {POLL_INTERVAL / 1000}s
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" />
+              <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.15s' }} />
+              <div className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.3s' }} />
+            </div>
+            <button onClick={load} disabled={isLoading} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-indigo-400 hover:text-white bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 transition-all disabled:opacity-50">
               <RotateCcw className="w-4 h-4" />
-              Retry now
+              {isLoading ? 'Loading...' : 'Retry Now'}
             </button>
           </div>
         </div>
@@ -164,172 +185,183 @@ export default function DebriefPage() {
     return (
       <div className="min-h-screen bg-[#0a0a14]">
         <Navbar />
-        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-          <p className="text-[#ef4444]">{error}</p>
-          <button onClick={load} className="btn-secondary text-sm flex items-center gap-2">
-            <RotateCcw className="w-4 h-4" />
-            Retry
-          </button>
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-24 pb-16">
+          <div className="flex flex-col items-center justify-center min-h-[50vh] gap-6">
+            <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center">
+              <AlertTriangle className="w-8 h-8 text-red-400" />
+            </div>
+            <div className="text-center">
+              <h2 className="text-xl font-bold text-gray-200 mb-2">Failed to Load Debrief</h2>
+              <p className="text-sm text-gray-500 max-w-md">{error}</p>
+            </div>
+            <button onClick={load} disabled={isLoading} className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 transition-all">
+              <RotateCcw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              {isLoading ? 'Loading...' : 'Retry'}
+            </button>
+          </div>
         </div>
       </div>
     )
   }
 
   const overallReadiness = debrief.overallReadiness != null
-    ? Math.round((debrief.overallReadiness / (debrief.overallReadiness > 10 ? 1 : 10)) * 100)
-    : 0
-
+    ? Math.round((debrief.overallReadiness / (debrief.overallReadiness > 10 ? 1 : 10)) * 100) : 0
   const codeQuality = debrief.codeQuality != null ? Math.round((debrief.codeQuality / 5) * 100) : 0
   const problemSolving = debrief.problemDecomposition != null ? Math.round((debrief.problemDecomposition / 5) * 100) : 0
   const communication = debrief.communication != null ? Math.round((debrief.communication / 5) * 100) : 0
-
-  const tips = debrief.tips || debrief.studyTopics?.slice(0, 5) || []
-  const timeComplexity = debrief.timeComplexity || debrief.weakTopics?.[0] || null
-  const spaceComplexity = debrief.spaceComplexity || debrief.weakTopics?.[1] || null
+  const tips = debrief.tips || debrief.studyTopics || []
+  const timeComplexity = debrief.timeComplexity
+  const spaceComplexity = debrief.spaceComplexity
 
   return (
     <div className="min-h-screen bg-[#0a0a14]">
       <Navbar />
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-24 pb-16">
-        <div className="flex items-center gap-3 mb-8">
-          <Link to="/dashboard" className="flex items-center gap-1.5 text-sm text-[#5a5a72] hover:text-[#f1f1f5] transition-colors">
-            <ArrowLeft className="w-4 h-4" />
-            Dashboard
-          </Link>
-        </div>
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-24 pb-16 space-y-6">
+        {/* Breadcrumb */}
+        <Link to="/dashboard" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-300 transition-colors group">
+          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+          Back to Dashboard
+        </Link>
 
-        {/* TOP: Problem title + difficulty badge + date + duration */}
-        <div className="bg-[#11111f] border border-white/[0.06] rounded-xl p-6 mb-8">
-          <div className="flex items-start justify-between flex-wrap gap-6">
-            <div className="flex-1">
-              <div className="flex items-center gap-3 mb-2">
-                <h1 className="text-2xl font-bold text-[#f1f1f5]">{debrief.problemTitle || 'Practice Session'}</h1>
+        {/* Hero Section — Problem title + Score */}
+        <div className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-gradient-to-br from-[#11111f] via-[#11111f] to-[#1a1a2e] p-6 sm:p-8">
+          <div className="absolute top-0 right-0 w-72 h-72 bg-indigo-600/5 rounded-full blur-3xl" />
+          <div className="absolute bottom-0 left-0 w-48 h-48 bg-purple-600/5 rounded-full blur-3xl" />
+          <div className="relative flex items-start justify-between flex-wrap gap-6">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 flex-wrap mb-3">
+                <h1 className="text-2xl sm:text-3xl font-bold text-white">{debrief.problemTitle || 'Practice Session'}</h1>
                 {debrief.problemDifficulty && (
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                    debrief.problemDifficulty.toLowerCase() === 'easy' ? 'bg-green-500/10 text-green-400 border border-green-500/20'
-                    : debrief.problemDifficulty.toLowerCase() === 'hard' ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-                    : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                  }`}>
-                    {debrief.problemDifficulty}
+                  <span className={`px-3 py-0.5 rounded-full text-xs font-semibold border ${
+                    debrief.problemDifficulty.toLowerCase() === 'easy' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    : debrief.problemDifficulty.toLowerCase() === 'hard' ? 'bg-red-500/10 text-red-400 border-red-500/30'
+                    : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                  }`}>{debrief.problemDifficulty}</span>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500">
+                {debrief.sessionDate && (
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                    {new Date(debrief.sessionDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                  </span>
+                )}
+                {debrief.duration > 0 && (
+                  <span className="flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-amber-400" />
+                    {Math.round(debrief.duration / 60)} min
                   </span>
                 )}
               </div>
-              {debrief.sessionDate && (
-                <p className="text-sm text-[#5a5a72]">
-                  Session on {new Date(debrief.sessionDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
-                  {debrief.duration ? ` · ${Math.round(debrief.duration / 60)} min` : ''}
-                </p>
-              )}
             </div>
-
-            {/* Score Ring */}
             <ScoreCircle value={overallReadiness} />
           </div>
         </div>
 
-        {/* Summary card with border-left */}
+        {/* Summary Quote */}
         {debrief.summary && (
-          <div className="border-l-4 border-l-[#6d4df2] bg-[#11111f] border border-white/[0.06] rounded-r-xl p-5 mb-6">
-            <p className="text-sm text-[#9191a8] leading-relaxed italic">&ldquo;{debrief.summary}&rdquo;</p>
+          <div className="relative border-l-4 border-l-indigo-500 bg-[#11111f] border border-white/[0.06] rounded-r-xl p-5">
+            <div className="absolute -top-3 -left-3 w-8 h-8 bg-indigo-600/20 rounded-full flex items-center justify-center">
+              <span className="text-indigo-400 text-lg">&ldquo;</span>
+            </div>
+            <p className="text-sm text-gray-400 leading-relaxed italic pl-2">{debrief.summary}</p>
           </div>
         )}
 
-        {/* Metric bars */}
-        <div className="bg-[#11111f] border border-white/[0.06] rounded-xl p-6 mb-6">
-          <h3 className="text-sm font-semibold text-[#f1f1f5] mb-4">Performance Metrics</h3>
-          <MetricBar label="Code Quality" value={codeQuality} color="#6d4df2" />
-          <MetricBar label="Problem Solving" value={problemSolving} color="#22c55e" />
-          <MetricBar label="Communication" value={communication} color="#f59e0b" />
-        </div>
-
-        {/* Two columns: Strengths + Improvements */}
-        <div className="grid md:grid-cols-2 gap-4 mb-6">
-          <div className="bg-[#11111f] border border-white/[0.06] rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-green-400 mb-4 flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4" />
-              Strengths
-            </h3>
-            <ul className="space-y-2">
-              {(debrief.strengths || []).map((s, i) => (
-                <li key={i} className="flex items-start gap-2 border-l-2 border-green-500/30 pl-3">
-                  <span className="text-sm text-[#9191a8]">{s}</span>
-                </li>
-              ))}
-              {(!debrief.strengths || debrief.strengths.length === 0) && (
-                <li className="text-sm text-[#5a5a72]">No specific strengths recorded.</li>
-              )}
-            </ul>
-          </div>
-
-          <div className="bg-[#11111f] border border-white/[0.06] rounded-xl p-5">
-            <h3 className="text-sm font-semibold text-amber-400 mb-4 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4" />
-              Improvements
-            </h3>
-            <ul className="space-y-2">
-              {(debrief.improvements || []).map((item, i) => (
-                <li key={i} className="flex items-start gap-2 border-l-2 border-amber-500/30 pl-3">
-                  <span className="text-sm text-[#9191a8]">{item}</span>
-                </li>
-              ))}
-              {(!debrief.improvements || debrief.improvements.length === 0) && (
-                <li className="text-sm text-[#5a5a72]">No specific improvements recorded.</li>
-              )}
-            </ul>
-          </div>
-        </div>
-
-        {/* Complexity badges */}
-        {(timeComplexity || spaceComplexity) && (
-          <div className="bg-[#11111f] border border-white/[0.06] rounded-xl p-5 mb-6">
-            <h3 className="text-sm font-semibold text-[#f1f1f5] mb-3">Complexity Analysis</h3>
-            <div className="flex flex-wrap gap-3">
-              {timeComplexity && (
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#6d4df2]/10 border border-[#6d4df2]/20">
-                  <Clock className="w-3.5 h-3.5 text-[#6d4df2]" />
-                  <span className="text-xs font-medium text-[#f1f1f5]">Time: {timeComplexity}</span>
-                </div>
-              )}
-              {spaceComplexity && (
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#22c55e]/10 border border-[#22c55e]/20">
-                  <Cpu className="w-3.5 h-3.5 text-[#22c55e]" />
-                  <span className="text-xs font-medium text-[#f1f1f5]">Space: {spaceComplexity}</span>
-                </div>
-              )}
+        {/* Performance Metrics */}
+        {overallReadiness > 0 && (
+          <div className="bg-[#11111f] border border-white/[0.06] rounded-xl p-6">
+            <div className="flex items-center gap-2 mb-6">
+              <TrendingUp className="w-5 h-5 text-indigo-400" />
+              <h2 className="text-base font-bold text-white">Performance Metrics</h2>
+            </div>
+            <div className="grid gap-5">
+              <MetricBar label="Code Quality" value={codeQuality} color="#6d4df2" />
+              <MetricBar label="Problem Solving" value={problemSolving} color="#22c55e" />
+              <MetricBar label="Communication" value={communication} color="#f59e0b" />
             </div>
           </div>
         )}
 
-        {/* Tips section */}
-        {tips.length > 0 && (
-          <div className="bg-[#11111f] border border-white/[0.06] rounded-xl p-5 mb-6">
-            <h3 className="text-sm font-semibold text-[#f1f1f5] mb-4 flex items-center gap-2">
-              <Lightbulb className="w-4 h-4 text-[#f59e0b]" />
-              Tips
-            </h3>
-            <ol className="space-y-3">
-              {tips.map((tip, i) => (
-                <li key={i} className="flex items-start gap-3">
-                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[#6d4df2]/10 border border-[#6d4df2]/20 flex items-center justify-center text-xs font-medium text-[#6d4df2]">
-                    {i + 1}
-                  </span>
-                  <span className="text-sm text-[#9191a8] leading-relaxed">{tip}</span>
-                </li>
-              ))}
-            </ol>
+        {/* Strengths & Improvements */}
+        <div className="grid md:grid-cols-2 gap-5">
+          {/* Strengths */}
+          <div className="bg-[#11111f] border border-white/[0.06] rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-white/[0.06]">
+              <div className="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              </div>
+              <h3 className="text-sm font-bold text-white">What Went Well</h3>
+            </div>
+            {debrief.strengths?.length > 0 ? (
+              <ul className="space-y-3">
+                {debrief.strengths.map((s, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500/10 flex items-center justify-center mt-0.5">
+                      <span className="text-[10px] text-emerald-400 font-bold">{i + 1}</span>
+                    </span>
+                    <span className="text-sm text-gray-400 leading-relaxed">{s}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-600 text-center py-4">No specific strengths recorded.</p>
+            )}
           </div>
-        )}
 
-        {/* Study topics */}
-        {debrief.studyTopics && debrief.studyTopics.length > 0 && (
-          <div className="bg-[#11111f] border border-white/[0.06] rounded-xl p-5 mb-6">
-            <h3 className="text-sm font-semibold text-[#f1f1f5] mb-3 flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-[#6d4df2]" />
-              Study Next
-            </h3>
-            <div className="flex flex-wrap gap-2">
-              {debrief.studyTopics.map(t => (
-                <span key={t} className="px-3 py-1 rounded-full text-xs font-medium bg-[#6d4df2]/10 text-[#a78bfa] border border-[#6d4df2]/20">
+          {/* Improvements */}
+          <div className="bg-[#11111f] border border-white/[0.06] rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-white/[0.06]">
+              <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center">
+                <AlertTriangle className="w-4 h-4 text-amber-400" />
+              </div>
+              <h3 className="text-sm font-bold text-white">Areas to Improve</h3>
+            </div>
+            {debrief.improvements?.length > 0 ? (
+              <ul className="space-y-3">
+                {debrief.improvements.map((item, i) => (
+                  <li key={i} className="flex items-start gap-3">
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-amber-500/10 flex items-center justify-center mt-0.5">
+                      <span className="text-[10px] text-amber-400 font-bold">{i + 1}</span>
+                    </span>
+                    <span className="text-sm text-gray-400 leading-relaxed">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-600 text-center py-4">No specific improvements recorded.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Complexity + Weak Topics */}
+        {(timeComplexity || spaceComplexity || debrief.weakTopics?.length > 0) && (
+          <div className="bg-[#11111f] border border-white/[0.06] rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <Cpu className="w-5 h-5 text-purple-400" />
+              <h2 className="text-sm font-bold text-white">Complexity & Weak Areas</h2>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {timeComplexity && (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
+                  <Clock className="w-4 h-4 text-indigo-400" />
+                  <div>
+                    <p className="text-[10px] text-indigo-400/60 uppercase tracking-wider font-semibold">Time</p>
+                    <p className="text-xs font-medium text-white">{timeComplexity}</p>
+                  </div>
+                </div>
+              )}
+              {spaceComplexity && (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                  <Cpu className="w-4 h-4 text-emerald-400" />
+                  <div>
+                    <p className="text-[10px] text-emerald-400/60 uppercase tracking-wider font-semibold">Space</p>
+                    <p className="text-xs font-medium text-white">{spaceComplexity}</p>
+                  </div>
+                </div>
+              )}
+              {debrief.weakTopics?.map(t => (
+                <span key={t} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 text-red-300 border border-red-500/20">
                   {t}
                 </span>
               ))}
@@ -337,20 +369,38 @@ export default function DebriefPage() {
           </div>
         )}
 
-        {/* Bottom actions */}
-        <div className="flex items-center gap-3">
+        {/* Study Next + Tips */}
+        {tips.length > 0 && (
+          <div className="bg-[#11111f] border border-white/[0.06] rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <BookOpen className="w-5 h-5 text-amber-400" />
+              <h2 className="text-sm font-bold text-white">Study Next</h2>
+            </div>
+            <div className="grid gap-3">
+              {tips.map((tip, i) => (
+                <div key={i} className="flex items-start gap-3 bg-white/[0.02] rounded-xl p-4 border border-white/[0.04]">
+                  <span className="flex-shrink-0 w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-sm font-bold text-indigo-400">
+                    {i + 1}
+                  </span>
+                  <div className="flex-1 pt-1">
+                    <p className="text-sm text-gray-300 leading-relaxed">{tip}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex items-center gap-3 pt-2">
           {debrief.problemSlug && (
-            <Link
-              to={`/problems/${debrief.problemSlug}`}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-[#6d4df2] hover:bg-[#7c5ff5] text-white transition-all duration-150 active:scale-[0.98]"
-            >
-              Practice Again →
+            <Link to={`/problems/${debrief.problemSlug}`}
+              className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 shadow-lg shadow-indigo-600/20 transition-all active:scale-[0.98]">
+              <RotateCcw className="w-4 h-4" /> Solve Again
             </Link>
           )}
-          <Link
-            to="/dashboard"
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-white/5 hover:bg-white/10 text-[#9191a8] hover:text-[#f1f1f5] border border-white/10 transition-all duration-150"
-          >
+          <Link to="/dashboard"
+            className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 transition-all">
             Back to Dashboard
           </Link>
         </div>

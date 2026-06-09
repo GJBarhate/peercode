@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Users, Loader2, CheckCircle2, X, Zap, Clock, ArrowRight } from 'lucide-react'
 import { useSocket } from '../../context/SocketContext'
@@ -21,11 +21,16 @@ export default function MatchingQueue() {
   const [countdown, setCountdown] = useState(60)
   const [matchedRoomId, setMatchedRoomId] = useState(null)
   const [timerExpired, setTimerExpired] = useState(false)
+  const mountedRef = useRef(true)
+  const matchedRef = useRef(false)
 
   useEffect(() => {
     if (!socket) return
 
+    mountedRef.current = true
+
     const onMatched = (data) => {
+      matchedRef.current = true
       setMatchedRoomId(data.roomId)
       setState('matched')
       setCountdown(60)
@@ -42,6 +47,7 @@ export default function MatchingQueue() {
     }
 
     const onLeft = () => {
+      if (matchedRef.current) return
       setState('idle')
       setQueuePosition(null)
       setTimerExpired(false)
@@ -54,22 +60,34 @@ export default function MatchingQueue() {
       setTimerExpired(false)
     }
 
+    const onTimeout = () => {
+      setState('idle')
+      setTimerExpired(true)
+      setCountdown(60)
+      toast.dismiss()
+    }
+
     socket.on('queue-matched', onMatched)
     socket.on('queue-waiting', onWaiting)
     socket.on('queue-left', onLeft)
     socket.on('queue-error', onError)
+    socket.on('queue-timeout', onTimeout)
 
     return () => {
+      mountedRef.current = false
       socket.off('queue-matched', onMatched)
       socket.off('queue-waiting', onWaiting)
       socket.off('queue-left', onLeft)
       socket.off('queue-error', onError)
+      socket.off('queue-timeout', onTimeout)
     }
   }, [socket])
 
   useEffect(() => {
     if (state === 'matched' && matchedRoomId) {
-      const t = setTimeout(() => navigate(`/room/${matchedRoomId}`), 1500)
+      const t = setTimeout(() => {
+        navigate(`/room/${matchedRoomId}`)
+      }, 1500)
       return () => clearTimeout(t)
     }
   }, [state, matchedRoomId, navigate])
@@ -88,7 +106,7 @@ export default function MatchingQueue() {
 
   useEffect(() => {
     return () => {
-      if (state === 'waiting' && socket) {
+      if (state === 'waiting' && socket && !matchedRef.current) {
         socket.emit('queue-leave')
       }
     }
@@ -96,12 +114,14 @@ export default function MatchingQueue() {
 
   const handleJoin = () => {
     if (!socket) { toast.error('Not connected to server'); return }
+    matchedRef.current = false
     socket.emit('queue-join', { role, topic })
     setState('waiting')
     setTimerExpired(false)
   }
 
   const handleLeave = () => {
+    matchedRef.current = false
     if (socket) socket.emit('queue-leave')
     setState('idle')
     setQueuePosition(null)
@@ -109,6 +129,7 @@ export default function MatchingQueue() {
   }
 
   const handleKeepWaiting = () => {
+    matchedRef.current = false
     setCountdown(60)
     setTimerExpired(false)
     if (socket) {
@@ -119,6 +140,7 @@ export default function MatchingQueue() {
   }
 
   const handleSolo = () => {
+    matchedRef.current = false
     if (socket) socket.emit('queue-leave')
     navigate('/problems')
   }
@@ -153,7 +175,7 @@ export default function MatchingQueue() {
             className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
           >
             <ArrowRight className="w-4 h-4" />
-            Start Solo Practice
+            Solve Problems Solo
           </button>
           <button
             onClick={handleKeepWaiting}
@@ -263,7 +285,7 @@ export default function MatchingQueue() {
         className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm bg-indigo-600 hover:bg-indigo-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <Users className="w-4 h-4" />
-        Find Partner
+        Start Matching
       </button>
     </div>
   )

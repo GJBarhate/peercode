@@ -27,10 +27,10 @@ You can return the answer in any order.`,
       }
     ],
     testCases: [
-      { input: "2,7,11,15\n9", expectedOutput: "0,1" },
-      { input: "3,2,4\n6", expectedOutput: "1,2" },
-      { input: "3,3\n6", expectedOutput: "0,1" },
-      { input: "-1,-2,-3\n-5", expectedOutput: "0,1" }
+      { input: "[2,7,11,15]\n9", expectedOutput: "[0,1]" },
+      { input: "[3,2,4]\n6", expectedOutput: "[1,2]" },
+      { input: "[3,3]\n6", expectedOutput: "[0,1]" },
+      { input: "[2,5,5,11]\n10", expectedOutput: "[1,2]" }
     ],
     tags: ["Array", "Hash Table"],
     constraints: "2 <= nums.length <= 10^4\n-10^9 <= nums[i] <= 10^9\n-10^9 <= target <= 10^9",
@@ -67,6 +67,71 @@ public:
     // Your solution here
     return []int{0, 1}
 }`
+    },
+    testHarness: {
+      javascript: `// __USER_CODE__
+const lines = \`__TEST_INPUT__\`.trim().split('\\n');
+const nums = JSON.parse(lines[0]);
+const target = parseInt(lines[1]);
+console.log(JSON.stringify(twoSum(nums, target)));`,
+      typescript: `// __USER_CODE__
+const lines: string[] = \`__TEST_INPUT__\`.trim().split('\\n');
+const nums: number[] = JSON.parse(lines[0]);
+const target: number = parseInt(lines[1]);
+console.log(JSON.stringify(twoSum(nums, target)));`,
+      python: `import json, sys
+# __USER_CODE__
+data = """__TEST_INPUT__""".strip().split('\\n')
+nums = json.loads(data[0])
+target = int(data[1])
+print(json.dumps(Solution().twoSum(nums, target)))`,
+      java: `import java.util.*;
+// __USER_CODE__
+public class Main {
+  public static void main(String[] args) {
+    String input = "__TEST_INPUT__";
+    String[] lines = input.split("\\n");
+    int[] nums = Arrays.stream(lines[0].replaceAll("[\\\\[\\\\]\\\\s]","").split(",")).mapToInt(Integer::parseInt).toArray();
+    int target = Integer.parseInt(lines[1].trim());
+    Solution sol = new Solution();
+    System.out.println(Arrays.toString(sol.twoSum(nums, target)));
+  }
+}`,
+      cpp: `#include <bits/stdc++.h>
+using namespace std;
+// __USER_CODE__
+int main() {
+  string input = "__TEST_INPUT__";
+  istringstream iss(input);
+  string line1, line2;
+  getline(iss, line1); getline(iss, line2);
+  vector<int> nums;
+  string tmp = line1.substr(1, line1.size()-2);
+  stringstream ss(tmp); string token;
+  while (getline(ss, token, ',')) nums.push_back(stoi(token));
+  int target = stoi(line2);
+  Solution sol;
+  auto res = sol.twoSum(nums, target);
+  cout << "[" << res[0] << "," << res[1] << "]" << endl;
+}`,
+      go: `package main
+import (
+  "encoding/json"
+  "fmt"
+  "strings"
+  "strconv"
+)
+// __USER_CODE__
+func main() {
+  input := \`__TEST_INPUT__\`
+  lines := strings.Split(strings.TrimSpace(input), "\\n")
+  var nums []int
+  json.Unmarshal([]byte(lines[0]), &nums)
+  target, _ := strconv.Atoi(strings.TrimSpace(lines[1]))
+  res := twoSum(nums, target)
+  out, _ := json.Marshal(res)
+  fmt.Println(string(out))
+}`,
     }
   },
   {

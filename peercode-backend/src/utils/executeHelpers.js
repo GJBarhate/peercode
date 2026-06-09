@@ -6,7 +6,8 @@ const LANGUAGE_MAP = {
   java: 62,
   cpp: 54, 'c++': 54,
   c: 50,
-  typescript: 74, ts: 74
+  typescript: 74, ts: 74,
+  go: 106, golang: 106
 };
 
 function getLanguageId(lang) {
@@ -143,4 +144,34 @@ try {
   return code;
 }
 
-module.exports = { getLanguageId, extractFunctionName, wrapCodeForTest };
+function buildCodeFromHarness(problem, language, userCode, testInput) {
+  const harness = problem?.testHarness?.[language];
+  if (!harness) return null;
+
+  let code = harness;
+
+  const userCodePlaceholders = ['// __USER_CODE__', '# __USER_CODE__', '__USER_CODE__', '// USER_CODE_HERE', 'USER_CODE_HERE'];
+  for (const placeholder of userCodePlaceholders) {
+    if (code.includes(placeholder)) {
+      code = code.replace(placeholder, userCode);
+      break;
+    }
+  }
+
+  // Escape test input for languages that embed in regular string literals (Java, C++)
+  let escapedInput = testInput;
+  if (language === 'java' || language === 'cpp') {
+    escapedInput = escapedInput
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/\r\n/g, '\\n')
+      .replace(/\r/g, '\\n')
+      .replace(/\n/g, '\\n');
+  }
+
+  code = code.replace(/__TEST_INPUT__/g, escapedInput);
+
+  return code;
+}
+
+module.exports = { getLanguageId, extractFunctionName, wrapCodeForTest, buildCodeFromHarness };

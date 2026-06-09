@@ -12,6 +12,7 @@ export function SocketProvider({ children }) {
   const socketRef = useRef(null)
   const reconnectTimeoutRef = useRef(null)
   const connectionAttemptRef = useRef(0)
+  const previousSocketIdRef = useRef(null)
 
   useEffect(() => {
     if (authLoading) {
@@ -30,8 +31,13 @@ export function SocketProvider({ children }) {
       return
     }
 
-    if (socketRef.current) {
-      socketRef.current.auth = { token: accessToken }
+    // If socket exists but token changed, disconnect and reconnect to re-authenticate
+    if (socketRef.current && socketRef.current.auth?.token !== accessToken) {
+      logger.debug('Token changed - disconnecting socket to re-authenticate')
+      disconnectSocket()
+      socketRef.current = null
+      setSocket(null)
+      setIsConnected(false)
     }
 
     if (socketRef.current?.connected) {
@@ -53,6 +59,16 @@ export function SocketProvider({ children }) {
       }
     }
 
+    // Track current room for reconnection
+    const handleJoinRoom = (data) => {
+      if (data?.roomId) {
+        socketRef.current.currentRoom = data.roomId
+        logger.debug('Joined room:', data.roomId)
+      }
+    }
+
+    newSocket.on('join-room', handleJoinRoom)
+
     const handleDisconnect = () => {
       logger.debug('Socket disconnected')
       setIsConnected(false)
@@ -73,6 +89,16 @@ export function SocketProvider({ children }) {
       logger.debug('Socket reconnected successfully')
       setIsConnected(true)
       connectionAttemptRef.current = 0
+      
+      // Emit rejoin-room with previous socket ID to rejoin rooms
+      if (previousSocketIdRef.current && socketRef.current?.connected) {
+        logger.debug('Emitting rejoin-room with previous socket ID:', previousSocketIdRef.current)
+        socketRef.current.emit('rejoin-room', {
+          roomId: socketRef.current.currentRoom,
+          previousSocketId: previousSocketIdRef.current,
+        })
+      }
+      previousSocketIdRef.current = socketRef.current?.id
     }
 
     const handleReconnectAttempt = () => {
@@ -106,6 +132,7 @@ export function SocketProvider({ children }) {
       newSocket.off('reconnect', handleReconnect)
       newSocket.off('reconnect_attempt', handleReconnectAttempt)
       newSocket.off('reconnect_error', handleReconnectError)
+      newSocket.off('join-room', handleJoinRoom)
     }
   }, [accessToken, user, authLoading])
 

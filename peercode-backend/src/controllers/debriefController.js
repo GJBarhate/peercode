@@ -79,9 +79,17 @@ Return ONLY valid JSON (no markdown, no extra text) with this exact structure:
   "weakTopics": ["<topic 1>", "<topic 2>"]
 }`;
 
+    // Validate Gemini AI config before inner try
+    let genAI;
+    try {
+      genAI = getGeminiAI();
+    } catch (configErr) {
+      logger.error('Gemini AI configuration error:', configErr);
+      return fail(res, 500, 'AI service not configured');
+    }
+
     try {
       // Call Gemini with timeout
-      const genAI = getGeminiAI();
       const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
       const timeoutPromise = new Promise((_, reject) =>

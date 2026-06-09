@@ -4,7 +4,7 @@ import Spinner from '../common/Spinner'
 import { runTests, getErrorMessage, solveProblem } from '../../services/api'
 import toast from 'react-hot-toast'
 
-export default function TestCaseRunner({ code, language, testCases = [], runNonce = 0, problemSlug, problemId, onRunComplete, externalResults }) {
+export default function TestCaseRunner({ code, language, testCases = [], runNonce = 0, problemSlug, problemId, onRunComplete, externalResults, isRunning: externalIsRunning, onRunningChange }) {
   const [results, setResults] = useState(null)
   const [isRunning, setIsRunning] = useState(false)
   const [ran, setRan] = useState(false)
@@ -12,6 +12,9 @@ export default function TestCaseRunner({ code, language, testCases = [], runNonc
   const [activeTab, setActiveTab] = useState('predefined') // 'predefined' or 'custom'
   const [customInput, setCustomInput] = useState('')
   const [customExpected, setCustomExpected] = useState('')
+
+  const running = externalIsRunning !== undefined ? externalIsRunning : isRunning
+  const setRunning = externalIsRunning !== undefined ? onRunningChange || (() => {}) : setIsRunning
 
   useEffect(() => {
     if (externalResults) {
@@ -22,12 +25,13 @@ export default function TestCaseRunner({ code, language, testCases = [], runNonc
   }, [externalResults])
 
   const handleRun = async (inputData = null) => {
+    if (running) return
     if (!code?.trim()) {
       toast.error('Write some code first!')
       return
     }
 
-    setIsRunning(true)
+    setRunning(true)
     setRan(false)
     setError(null)
 
@@ -77,7 +81,7 @@ export default function TestCaseRunner({ code, language, testCases = [], runNonc
       setError(errorMsg)
       toast.error(errorMsg)
     } finally {
-      setIsRunning(false)
+      setRunning(false)
     }
   }
 
@@ -85,16 +89,16 @@ export default function TestCaseRunner({ code, language, testCases = [], runNonc
   const total = results?.totalCount || 0
 
   useEffect(() => {
-    if (runNonce > 0) {
+    if (runNonce > 0 && !running) {
       handleRun()
     }
-  }, [runNonce, handleRun])
+  }, [runNonce, handleRun, running])
 
   useEffect(() => {
     const onKeyDown = (event) => {
       if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
         event.preventDefault()
-        if (!isRunning) {
+        if (!running) {
           handleRun()
         }
       }
@@ -102,7 +106,7 @@ export default function TestCaseRunner({ code, language, testCases = [], runNonc
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [isRunning, code, language, testCases, handleRun])
+  }, [running, code, language, testCases, handleRun])
 
   const getStatusColor = () => {
     if (total === 0) return 'bg-gray-700'

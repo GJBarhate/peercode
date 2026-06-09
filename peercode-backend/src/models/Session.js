@@ -26,10 +26,8 @@ const SessionSchema = new mongoose.Schema(
     ],
     snapshots: [
       {
-        timestamp: Date,
-        code: String,
-        language: String,
-        userId: mongoose.Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Snapshot',
       },
     ],
     startTime: {
@@ -72,5 +70,6 @@ const SessionSchema = new mongoose.Schema(
 SessionSchema.index({ roomId: 1, startTime: -1 });
 SessionSchema.index({ participants: 1 });
 SessionSchema.index({ problem: 1 });
+SessionSchema.index({ status: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Session', SessionSchema);

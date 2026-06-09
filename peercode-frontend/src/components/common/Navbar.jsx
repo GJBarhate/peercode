@@ -1,13 +1,15 @@
 import { useState, useRef, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { Code2, LayoutDashboard, BookOpen, User, LogOut, Menu, X, ChevronDown, Layers, Shield, Wifi, WifiOff, Users, Crown } from 'lucide-react'
+import { Code2, LayoutDashboard, BookOpen, User, LogOut, Menu, X, ChevronDown, Layers, Shield, Wifi, WifiOff, Users, Crown, Sun, Moon } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { useSocket } from '../../context/SocketContext'
+import { useTheme } from '../../context/ThemeContext'
 import LogoutConfirmModal from './LogoutConfirmModal'
 
 export default function Navbar() {
   const { user, logout } = useAuth()
   const { isConnected } = useSocket()
+  const { theme, toggleTheme } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -51,7 +53,8 @@ export default function Navbar() {
 
   const navLinks = [
     { to: '/problems', label: 'Problems', icon: BookOpen },
-    { to: '/tracks', label: 'Tracks', icon: Layers }
+    { to: '/tracks', label: 'Tracks', icon: Layers },
+    ...(user?.role === 'admin' ? [{ to: '/admin', label: 'Admin', icon: Shield }] : [])
   ]
 
   const mobileLinks = [
@@ -62,10 +65,10 @@ export default function Navbar() {
   ]
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-40 bg-gray-950/90 border-b border-gray-800/60 backdrop-blur-md">
+    <nav className="fixed top-0 left-0 right-0 z-40 backdrop-blur-md navbar-bg">
       {/* Disconnection Banner */}
       {!isConnected && user && (
-        <div className="bg-amber-900/30 border-b border-amber-800/50 px-4 py-2 flex items-center gap-2 text-xs text-amber-300">
+        <div className="bg-amber-900/30 dark:bg-amber-900/30 border-b border-amber-800/50 px-4 py-2 flex items-center gap-2 text-xs text-amber-300">
           <WifiOff className="w-3.5 h-3.5" />
           <span>Connection lost - attempting to reconnect...</span>
         </div>
@@ -76,7 +79,7 @@ export default function Navbar() {
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center group-hover:bg-indigo-500 transition-colors">
               <Code2 className="w-4 h-4 text-white" />
             </div>
-            <span className="font-bold text-lg text-gray-100">PeerCode</span>
+            <span className="font-bold text-lg text-gray-900 dark:text-gray-100">PeerCode</span>
           </Link>
 
           <div className="hidden lg:flex items-center gap-1">
@@ -86,8 +89,8 @@ export default function Navbar() {
                 to={to}
                 className={`relative flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   isActive(to)
-                    ? 'text-violet-400'
-                    : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800'
+                    ? 'text-violet-600 dark:text-violet-400'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -100,14 +103,21 @@ export default function Navbar() {
           </div>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => toggleTheme()}
+              className="p-2 rounded-lg transition-colors text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+              aria-label="Toggle theme"
+            >
+              {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
             {user ? (
               <>
                 <Link
                   to="/dashboard"
                   className={`hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isActive('/dashboard')
-                      ? 'text-indigo-400 bg-indigo-500/10'
-                      : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800'
+                      ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'
                   }`}
                 >
                   <LayoutDashboard className="w-4 h-4" />
@@ -119,7 +129,7 @@ export default function Navbar() {
                   className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 hover:bg-violet-500 text-white transition-colors"
                 >
                   <Users className="w-3.5 h-3.5" />
-                  Find Partner
+                  Practice with Partner
                 </Link>
 
                 <Link
@@ -133,7 +143,7 @@ export default function Navbar() {
                 <div className="relative" ref={userMenuRef}>
                   <button
                     onClick={() => setUserMenuOpen(v => !v)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-300 hover:text-gray-100 hover:bg-gray-800 transition-colors"
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                   >
                     <div className="w-7 h-7 bg-indigo-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
                       {user.username?.[0]?.toUpperCase() || 'U'}
@@ -142,76 +152,75 @@ export default function Navbar() {
                     <ChevronDown className="w-3.5 h-3.5" />
                   </button>
                   {userMenuOpen && (
-                    <div className="absolute right-0 top-full mt-2 w-48 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden">
-                      <div className="px-4 py-3 border-b border-gray-800">
-                        <p className="text-sm font-semibold text-gray-100">{user.username}</p>
+                    <div className="absolute right-0 top-full mt-2 w-48 rounded-xl shadow-2xl overflow-hidden bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
+                      <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-800">
+                        <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{user.username}</p>
                         <p className="text-xs text-gray-500">{user.email}</p>
                         <div className="mt-1 flex items-center gap-2">
-                          <span className="text-xs text-indigo-400 font-medium">ELO {user.elo || 1200}</span>
+                          <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">ELO {user.elo || 1200}</span>
                           <div className="flex items-center gap-1">
                             {isConnected ? (
                               <>
                                 <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                                <span className="text-xs text-green-400">Connected</span>
+                                <span className="text-xs text-green-600 dark:text-green-400">Connected</span>
                               </>
                             ) : (
                               <>
                                 <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
-                                <span className="text-xs text-amber-400">Connecting...</span>
+                                <span className="text-xs text-amber-600 dark:text-amber-400">Connecting...</span>
                               </>
                             )}
                           </div>
                         </div>
                       </div>
                        <div>
-                         <button
-                           onClick={() => { setUserMenuOpen(false); navigate('/dashboard') }}
-                           className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-gray-100 transition-colors"
-                         >
-                           <LayoutDashboard className="w-4 h-4" />
-                           Dashboard
-                         </button>
-                         <button
-                           onClick={() => { setUserMenuOpen(false); navigate('/profile') }}
-                           className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-gray-100 transition-colors"
-                         >
-                           <User className="w-4 h-4" />
-                           Profile
-                         </button>
-                         <button
-                           onClick={() => { setUserMenuOpen(false); navigate('/subscription') }}
-                           className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-amber-400 hover:bg-amber-900/20 hover:text-amber-300 transition-colors"
-                         >
-                           <Crown className="w-4 h-4" />
-                           Upgrade
-                         </button>
-                       </div>
-                      {user.role === 'admin' && (
                         <button
-                          onClick={() => { setUserMenuOpen(false); navigate('/admin') }}
-                          className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-gray-100 transition-colors"
+                          onClick={() => { setUserMenuOpen(false); navigate('/dashboard') }}
+                          className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
                         >
-                          <Shield className="w-4 h-4" />
-                          Admin Panel
+                          <LayoutDashboard className="w-4 h-4" />
+                          Dashboard
                         </button>
-                      )}
-                      <div className="border-t border-gray-800">
                         <button
-                          onClick={handleLogoutClick}
-                          className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-red-900/20 transition-colors"
-                          aria-label="Open sign out confirmation"
+                          onClick={() => { setUserMenuOpen(false); navigate('/profile') }}
+                          className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
                         >
-                          <LogOut className="w-4 h-4" />
-                          Sign Out
+                          <User className="w-4 h-4" />
+                          Profile
                         </button>
+                        {user?.role === 'admin' && (
+                          <button
+                            onClick={() => { setUserMenuOpen(false); navigate('/admin') }}
+                            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-purple-700 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/20 hover:text-purple-900 dark:hover:text-purple-300 transition-colors"
+                          >
+                            <Shield className="w-4 h-4" />
+                            Admin Panel
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { setUserMenuOpen(false); navigate('/subscription') }}
+                          className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/20 hover:text-amber-800 dark:hover:text-amber-300 transition-colors"
+                        >
+                          <Crown className="w-4 h-4" />
+                          Upgrade
+                        </button>
+                        <div className="border-t border-gray-200 dark:border-gray-800 mt-1 pt-1">
+                          <button
+                            onClick={() => { setUserMenuOpen(false); handleLogoutClick() }}
+                            className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-700 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-800 dark:hover:text-red-300 transition-colors rounded-lg"
+                          >
+                            <LogOut className="w-4 h-4" />
+                            Sign Out
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                     </div>
+                   )}
                 </div>
               </>
             ) : (
               <div className="flex items-center gap-2">
-                <Link to="/" className="px-4 py-2 rounded-lg text-sm font-medium text-gray-300 hover:text-gray-100 hover:bg-gray-800 transition-colors">
+                <Link to="/" className="px-4 py-2 rounded-lg text-sm font-medium transition-colors text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800">
                   Sign In
                 </Link>
                 <Link to="/?register=1" className="px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors">
@@ -221,7 +230,7 @@ export default function Navbar() {
             )}
 
             <button
-              className="lg:hidden p-2 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-gray-800 transition-colors"
+              className="lg:hidden p-2 rounded-lg transition-colors text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
               onClick={() => setMenuOpen(v => !v)}
             >
               {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -233,17 +242,17 @@ export default function Navbar() {
       {menuOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMenuOpen(false)} />
-          <div className="fixed left-0 top-0 bottom-0 w-72 bg-gray-950 border-r border-gray-800 shadow-2xl overflow-y-auto">
-            <div className="flex items-center justify-between px-4 h-16 border-b border-gray-800">
+          <div className="fixed left-0 top-0 bottom-0 w-72 shadow-2xl overflow-y-auto bg-white dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800">
+            <div className="flex items-center justify-between px-4 h-16 border-b border-gray-200 dark:border-gray-800">
               <Link to="/" className="flex items-center gap-2.5" onClick={() => setMenuOpen(false)}>
                 <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
                   <Code2 className="w-4 h-4 text-white" />
                 </div>
-                <span className="font-bold text-lg text-gray-100">PeerCode</span>
+                <span className="font-bold text-lg text-gray-900 dark:text-gray-100">PeerCode</span>
               </Link>
               <button
                 onClick={() => setMenuOpen(false)}
-                className="p-2 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-gray-800 transition-colors"
+                className="p-2 rounded-lg transition-colors text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -255,7 +264,7 @@ export default function Navbar() {
                   to={to}
                   onClick={() => setMenuOpen(false)}
                   className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    isActive(to) ? 'text-violet-400 bg-violet-500/10' : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800'
+                    isActive(to) ? 'text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-500/10' : 'text-gray-700 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800'
                   }`}
                 >
                   <Icon className="w-4 h-4" />
@@ -265,10 +274,10 @@ export default function Navbar() {
             </div>
             {user && (
               <div className="px-3 pb-4">
-                <div className="border-t border-gray-800 pt-3">
+                <div className="border-t border-gray-200 dark:border-gray-800 pt-3">
                   <button
                     onClick={() => { setMenuOpen(false); handleLogoutClick() }}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-400 hover:bg-red-900/20 transition-colors"
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                   >
                     <LogOut className="w-4 h-4" />
                     Sign Out

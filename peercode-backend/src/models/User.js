@@ -9,6 +9,8 @@ const SubscriptionSchema = new mongoose.Schema({
   razorpayCustomerId: String,
   razorpayPaymentLinkId: String,
   razorpayPaymentLinkUrl: String,
+  razorpayOrderId: String,
+  razorpayPaymentId: String,
   currentPeriodStart: Date,
   currentPeriodEnd: Date,
   cancelAtPeriodEnd: { type: Boolean, default: false }
@@ -63,12 +65,45 @@ const UserSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    solvedProblems: [
-      {
+    tokenVersion: {
+      type: Number,
+      default: 0,
+    },
+    loginAttempts: {
+      type: Number,
+      default: 0,
+    },
+    lockUntil: {
+      type: Date,
+      default: null,
+    },
+    verified: {
+      type: Boolean,
+      default: false,
+    },
+    emailVerificationToken: String,
+    emailVerificationExpires: Date,
+    googleId: {
+      type: String,
+      sparse: true,
+      unique: true,
+    },
+    authProvider: {
+      type: String,
+      enum: ['local', 'google'],
+      default: 'local',
+    },
+    profilePicture: String,
+    solvedProblems: {
+      type: [{
         problem: { type: mongoose.Schema.Types.ObjectId, ref: 'Problem' },
         solvedAt: { type: Date, default: Date.now },
+      }],
+      validate: {
+        validator: function (arr) { return arr.length <= 100; },
+        message: 'solvedProblems cannot exceed 100 entries',
       },
-    ],
+    },
     subscription: { type: SubscriptionSchema, default: () => ({}) },
     usage: {
       hintsUsed: { type: Number, default: 0 },

@@ -9,7 +9,7 @@ export default function MatchPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent" />
       </div>
     )
@@ -20,11 +20,11 @@ export default function MatchPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <Navbar />
       <main className="max-w-3xl mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-100 mb-2">Find a Partner</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">Find a Partner</h1>
           <p className="text-gray-500">Get instantly matched with another developer for a practice session</p>
         </div>
         <MatchingQueue />

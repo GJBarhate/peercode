@@ -12,7 +12,7 @@ const cookieParser = require('cookie-parser');
 const compression = require('compression');
 const mongoose = require('mongoose');
 
-const { generalLimiter, dashboardLimiter, apiLimiter, userGeminiLimiter, executeLimiter } = require('./middleware/rateLimiter');
+const { authLimiter, generalLimiter, dashboardLimiter, apiLimiter, userGeminiLimiter, executeLimiter } = require('./middleware/rateLimiter');
 const errorHandler = require('./middleware/errorHandler');
 const auth = require('./middleware/auth');
 const { getKeyPoolStatus } = require('./config/gemini');
@@ -32,11 +32,26 @@ const tracksRouter = require('./routes/tracks');
 const adminRouter = require('./routes/admin');
 const geminiKeyRouter = require('./routes/geminiKey');
 const subscriptionRouter = require('./routes/subscription');
+const solutionsRouter = require('./routes/solutions');
 
 const app = express();
 
 // Security
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", process.env.FRONTEND_URL || 'http://localhost:5173'],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
+    },
+  },
+}));
 app.use(mongoSanitize());
 
 // CORS
@@ -76,7 +91,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Routes
-app.use('/api/auth', authRouter);
+app.use('/api/auth', authLimiter, authRouter);
 app.use('/api/rooms', auth, apiLimiter, roomsRouter);
 app.use('/api/problems', apiLimiter, problemsRouter);
 app.use('/api/sessions', auth, dashboardLimiter, sessionsRouter);
@@ -90,6 +105,7 @@ app.use('/api/tracks', tracksRouter);
 app.use('/api/admin', auth, adminRouter);
 app.use('/api/gemini-key', auth, geminiKeyRouter);
 app.use('/api/subscription', subscriptionRouter);
+app.use('/api/solutions', auth, apiLimiter, solutionsRouter);
 
 // 404 handler
 app.use((req, res) => {

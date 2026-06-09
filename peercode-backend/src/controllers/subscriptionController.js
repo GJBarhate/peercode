@@ -50,97 +50,67 @@ async function createSubscription(req, res) {
     return fail(res, 400, 'Already subscribed to this plan');
   }
 
-  // Dev mode: if Razorpay not configured or fails, return mock URL
-  const isDev = process.env.NODE_ENV === 'development';
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-
-  // In dev mode, skip Razorpay and use mock immediately
-  if (isDev) {
-    const mockUrl = `${frontendUrl}/subscription?payment=success&mock=true&plan=${planId}`;
-    if (!user.subscription) user.subscription = {};
-    user.subscription.plan = planId;
-    user.subscription.status = 'active';
-    user.subscription.currentPeriodStart = new Date();
-    user.subscription.currentPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    await user.save();
-    
-    return success(res, { 
-      paymentLinkId: `mock_${Date.now()}`,
-      shortUrl: mockUrl,
-      planId,
-      amount: PLAN_PRICES[planId],
-      mock: true
-    }, 'Dev mode: mock payment link');
-  }
+  const planPrice = PLAN_PRICES[planId];
 
   try {
     const rzp = getRazorpay();
-    let customerId = user.subscription?.razorpayCustomerId;
-    
-    if (!customerId) {
-      const customer = await rzp.customers.create({
-        name: user.username,
-        email: user.email,
-        contact: '',
-        fail_existing: '0'
-      });
-      customerId = customer.id;
-      user.subscription.razorpayCustomerId = customerId;
-    }
 
-    const planPrice = PLAN_PRICES[planId];
-    
-    const paymentLink = await rzp.paymentLink.create({
+    const order = await rzp.orders.create({
       amount: planPrice * 100,
       currency: 'INR',
-      accept_partial: false,
-      description: `${planId.charAt(0).toUpperCase() + planId.slice(1)} Plan Subscription`,
-      customer: { id: customerId, name: user.username, email: user.email },
-      notify: { sms: false, email: true },
-      reminder_enable: true,
-      notes: { userId: user.id, planId, type: 'subscription' },
-      callback_url: frontendUrl + '/subscription?payment=success',
-      callback_method: 'get'
+      receipt: `${planId}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      notes: { userId: String(user._id), planId }
     });
 
-    user.subscription.plan = planId;
+    user.subscription.razorpayOrderId = order.id;
     user.subscription.status = 'pending';
-    user.subscription.razorpayPaymentLinkId = paymentLink.id;
-    user.subscription.razorpayPaymentLinkUrl = paymentLink.short_url;
     await user.save();
 
-    success(res, { 
-      paymentLinkId: paymentLink.id,
-      shortUrl: paymentLink.short_url,
+    success(res, {
+      orderId: order.id,
+      amount: order.amount,
       planId,
-      amount: planPrice
-    }, 'Payment link created. Complete payment to activate subscription.');
+      key: process.env.RAZORPAY_KEY_ID
+    }, 'Order created. Complete payment to activate subscription.');
   } catch (err) {
-    logger.error('Create subscription error:', err);
-    
-    // Dev fallback: return mock checkout URL and auto-activate
-    if (isDev) {
-      const mockUrl = `${frontendUrl}/subscription?payment=success&mock=true&plan=${planId}`;
-      user.subscription.plan = planId;
-      user.subscription.status = 'active';
-      user.subscription.currentPeriodStart = new Date();
-      user.subscription.currentPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-      await user.save();
-      
-      return success(res, { 
-        paymentLinkId: `mock_${Date.now()}`,
-        shortUrl: mockUrl,
-        planId,
-        amount: PLAN_PRICES[planId],
-        mock: true
-      }, 'Dev mode: mock payment link');
-    }
-    
+    logger.error('Create subscription order error:', err);
+
     if (err.message?.includes('Razorpay credentials not configured')) {
       return fail(res, 500, 'Payment system not configured. Contact admin.');
     }
-    fail(res, 500, err.message || 'Failed to create subscription');
+    fail(res, 500, err.message || 'Failed to create subscription order');
   }
+}
+
+async function verifyPayment(req, res) {
+  const { razorpay_payment_id, razorpay_order_id, razorpay_signature, planId } = req.body;
+  const user = req.user;
+
+  if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature) {
+    return fail(res, 400, 'Missing payment verification details');
+  }
+
+  const body = razorpay_order_id + '|' + razorpay_payment_id;
+  const expectedSignature = crypto
+    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+    .update(body)
+    .digest('hex');
+
+  if (expectedSignature !== razorpay_signature) {
+    return fail(res, 400, 'Invalid payment signature');
+  }
+
+  if (!user.subscription) user.subscription = {};
+
+  user.subscription.plan = planId || user.subscription.plan;
+  user.subscription.status = 'active';
+  user.subscription.currentPeriodStart = new Date();
+  user.subscription.currentPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  user.subscription.razorpayOrderId = undefined;
+  user.subscription.razorpayPaymentId = razorpay_payment_id;
+  await user.save();
+
+  success(res, { plan: user.subscription.plan, status: 'active' }, 'Payment verified. Subscription activated.');
 }
 
 async function cancelSubscription(req, res) {
@@ -168,6 +138,9 @@ async function cancelSubscription(req, res) {
 
 async function razorpayWebhook(req, res) {
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  if (!secret) {
+    return fail(res, 500, 'Webhook secret not configured');
+  }
   const signature = req.headers['x-razorpay-signature'];
   const body = JSON.stringify(req.body);
 
@@ -202,6 +175,7 @@ async function razorpayWebhook(req, res) {
         const user = await User.findOne({ 'subscription.razorpayPaymentLinkId': paymentLinkId });
         if (user) {
           user.subscription.status = 'past_due';
+          user.subscription.plan = 'free';
           user.subscription.razorpayPaymentLinkId = undefined;
           user.subscription.razorpayPaymentLinkUrl = undefined;
           await user.save();
@@ -220,6 +194,40 @@ function getPlanFromRazorpayPlan(planId) {
   return reverseMap[planId] || 'free';
 }
 
+async function getCancelInfo(req, res) {
+  const user = req.user;
+
+  if (!user.subscription?.plan || user.subscription.plan === 'free') {
+    return fail(res, 400, 'No active subscription');
+  }
+
+  const planId = user.subscription.plan;
+  const planPrice = PLAN_PRICES[planId];
+  const startDate = user.subscription.currentPeriodStart;
+
+  if (!startDate) {
+    return fail(res, 400, 'Subscription start date not found');
+  }
+
+  const now = new Date();
+  const daysInPeriod = 30;
+  const msInDay = 1000 * 60 * 60 * 24;
+  const daysUsed = Math.max(1, Math.ceil((now - startDate) / msInDay));
+  const dailyRate = planPrice / daysInPeriod;
+  const usedAmount = Math.min(planPrice, Math.round(dailyRate * Math.min(daysUsed, daysInPeriod)));
+  const refundAmount = Math.max(0, planPrice - usedAmount);
+
+  success(res, {
+    plan: planId,
+    planName: PLAN_MAP[planId] ? planId.charAt(0).toUpperCase() + planId.slice(1) : 'Unknown',
+    planPrice,
+    daysInPeriod,
+    daysUsed: Math.min(daysUsed, daysInPeriod),
+    usedAmount,
+    refundAmount
+  });
+}
+
 async function getSubscriptionStatus(req, res) {
   const user = req.user;
   const { getUsageInfo } = require('../utils/subscription');
@@ -236,4 +244,4 @@ async function getSubscriptionStatus(req, res) {
   });
 }
 
-module.exports = { getPlans, createSubscription, cancelSubscription, razorpayWebhook, getSubscriptionStatus };
+module.exports = { getPlans, createSubscription, verifyPayment, cancelSubscription, razorpayWebhook, getSubscriptionStatus, getCancelInfo };

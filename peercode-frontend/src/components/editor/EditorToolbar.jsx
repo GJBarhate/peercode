@@ -1,4 +1,4 @@
-import { Play, Settings, Copy, Check } from 'lucide-react'
+import { Play, Copy, Check, Lightbulb, Code2, Loader2 } from 'lucide-react'
 import { useState } from 'react'
 
 const LANGUAGES = [
@@ -10,7 +10,7 @@ const LANGUAGES = [
   { id: 'go', label: 'Go' }
 ]
 
-export default function EditorToolbar({ language, onLanguageChange, onRun, isRunning, code }) {
+export default function EditorToolbar({ language, onLanguageChange, onRun, isRunning, code, onGetHint, onAnalyze, isLoadingHint, isLoadingAnalysis }) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
@@ -33,7 +33,30 @@ export default function EditorToolbar({ language, onLanguageChange, onRun, isRun
           ))}
         </select>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
+        {onGetHint && (
+          <button
+            onClick={onGetHint}
+            disabled={isLoadingHint}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-gray-400 hover:text-amber-300 hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Get AI hint"
+          >
+            {isLoadingHint ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Lightbulb className="w-3.5 h-3.5" />}
+            {isLoadingHint ? 'Thinking...' : 'AI Hints'}
+          </button>
+        )}
+        {onAnalyze && (
+          <button
+            onClick={onAnalyze}
+            disabled={isLoadingAnalysis}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-gray-400 hover:text-purple-300 hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Analyze your code"
+          >
+            {isLoadingAnalysis ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Code2 className="w-3.5 h-3.5" />}
+            {isLoadingAnalysis ? 'Analyzing...' : 'AI Analyze'}
+          </button>
+        )}
+        <div className="w-px h-5 bg-gray-700 mx-1" />
         <button
           onClick={handleCopy}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-gray-400 hover:text-gray-100 hover:bg-gray-800 transition-colors"

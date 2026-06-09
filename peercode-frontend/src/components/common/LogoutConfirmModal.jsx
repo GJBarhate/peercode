@@ -29,33 +29,29 @@ export default function LogoutConfirmModal({ isOpen, onConfirm, onCancel, isLoad
               leaveFrom="opacity-100 scale-100"
               leaveTo="opacity-0 scale-95"
             >
-              <Dialog.Panel className="w-full max-w-sm transform overflow-hidden rounded-2xl bg-gray-900 border border-gray-800 shadow-2xl transition-all">
-                {/* Header */}
-                <div className="px-6 pt-6 pb-4 border-b border-gray-800">
+              <Dialog.Panel className="w-full max-w-sm transform overflow-hidden rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl transition-all">
+                <div className="px-6 pt-6 pb-4 border-b border-gray-200 dark:border-gray-800">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-red-900/30 rounded-full flex items-center justify-center">
-                      <AlertCircle className="w-5 h-5 text-red-400" />
+                    <div className="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                      <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
                     </div>
-                    <Dialog.Title className="text-lg font-bold text-gray-100">
+                    <Dialog.Title className="text-lg font-bold text-gray-900 dark:text-gray-100">
                       Sign Out?
                     </Dialog.Title>
                   </div>
                 </div>
 
-                {/* Body */}
                 <div className="px-6 py-4">
-                  <p className="text-sm text-gray-400">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
                     Are you sure you want to sign out? You'll need to log in again to access your account and continue practicing.
                   </p>
                 </div>
 
-                {/* Footer */}
-                <div className="px-6 py-4 border-t border-gray-800 flex gap-3 justify-end">
+                <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800 flex gap-3 justify-end">
                   <button
                     onClick={onCancel}
                     disabled={isLoading}
-                    className="px-4 py-2 rounded-lg text-sm font-medium text-gray-300 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    aria-label="Cancel sign out"
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
                     Cancel
                   </button>
@@ -63,7 +59,6 @@ export default function LogoutConfirmModal({ isOpen, onConfirm, onCancel, isLoad
                     onClick={onConfirm}
                     disabled={isLoading}
                     className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-                    aria-label="Confirm sign out"
                   >
                     {isLoading ? (
                       <>

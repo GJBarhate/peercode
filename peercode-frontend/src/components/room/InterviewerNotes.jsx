@@ -8,8 +8,13 @@ export default function InterviewerNotes({ roomId }) {
   const [wouldHire, setWouldHire] = useState(null)
   const [copied, setCopied] = useState(false)
   const debounceRef = useRef(null)
-
   const STORAGE_KEY = `peercode_notes_${roomId}`
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     try {

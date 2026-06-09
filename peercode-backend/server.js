@@ -32,12 +32,29 @@ async function start() {
       logger.info(`${signal} received. Shutting down gracefully...`);
       httpServer.close(() => {
         logger.info('HTTP server closed');
-        process.exit(0);
       });
+      try {
+        const { agenda } = require('./src/config/agenda');
+        await agenda.stop();
+        logger.info('Agenda scheduler stopped');
+      } catch (_) {}
+      try {
+        const mongoose = require('mongoose');
+        await mongoose.connection.close();
+        logger.info('MongoDB connection closed');
+      } catch (_) {}
+      setTimeout(() => process.exit(0), 3000);
     };
 
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
     process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    process.on('uncaughtException', (err) => {
+      logger.error('Uncaught exception:', err);
+      gracefulShutdown('uncaughtException');
+    });
+    process.on('unhandledRejection', (reason) => {
+      logger.error('Unhandled rejection:', reason);
+    });
   } catch (err) {
     logger.error('Failed to start server:', err);
     process.exit(1);

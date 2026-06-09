@@ -4,7 +4,9 @@ const Session = require('../../models/Session');
 const Room = require('../../models/Room');
 const AiDebrief = require('../../models/AiDebrief');
 const User = require('../../models/User');
+const Snapshot = require('../../models/Snapshot');
 const { callGemini } = require('../../config/gemini');
+const logger = require('../../utils/logger');
 
 module.exports = function defineAiDebriefJob(agenda) {
   agenda.define('ai-debrief', async (job) => {
@@ -16,11 +18,12 @@ module.exports = function defineAiDebriefJob(agenda) {
     const room = await Room.findOne({ roomId }).populate('problemId');
 
     if (!session) {
-      console.error('AI Debrief: session not found for roomId', roomId);
+      logger.error('AI Debrief: session not found for roomId', roomId);
       return;
     }
 
-    const snapshots = session.snapshots || [];
+    // Fetch snapshots from separate collection
+    const snapshots = await Snapshot.find({ sessionId: session._id }).sort({ timestamp: 1 });
     const firstCode = snapshots.length > 0 ? (snapshots[0].code || '') : '';
     const lastCode = snapshots.length > 0 ? (snapshots[snapshots.length - 1].code || '') : '';
 
@@ -62,7 +65,7 @@ JSON structure:
       const cleaned = raw.replace(/```json|```/g, '').trim();
       parsed = JSON.parse(cleaned);
     } catch (err) {
-      console.error('AI Debrief: failed to parse Gemini response:', err.message);
+      logger.error('AI Debrief: failed to parse Gemini response:', err.message);
       // Use fallback debrief with default scores
       parsed = {
         communication_score: 3,
@@ -107,7 +110,7 @@ JSON structure:
           { upsert: true, new: true }
         );
 
-        console.log(`✓ AI Debrief saved for user ${participantId} - readiness: ${parsed.overall_readiness}/10`);
+        logger.info(`AI Debrief saved for user ${participantId} - readiness: ${parsed.overall_readiness}/10`);
 
         // Update user weakness profile for recommendation engine
         const weakTopics = parsed.weak_topics || [];
@@ -119,7 +122,7 @@ JSON structure:
           await User.findByIdAndUpdate(participantId, { $inc: inc });
         }
       } catch (err) {
-        console.error(`AI Debrief: error saving debrief for user ${participantId}:`, err.message);
+        logger.error(`AI Debrief: error saving debrief for user ${participantId}:`, err.message);
       }
     }
   });

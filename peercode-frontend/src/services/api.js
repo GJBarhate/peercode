@@ -116,6 +116,9 @@ export const login = (email, password) => api.post('/auth/login', { email, passw
 export const register = (username, email, password) => api.post('/auth/register', { username, email, password })
 export const refreshToken = () => api.post('/auth/refresh')
 export const logout = () => api.post('/auth/logout')
+export const googleAuth = (code) => api.post('/auth/google', { code })
+export const linkGoogleAccount = (code) => api.post('/auth/link-google', { code })
+export const unlinkGoogleAccount = () => api.post('/auth/unlink-google')
 
 // Rooms
 export const createRoom = (data) => api.post('/rooms', data)
@@ -136,7 +139,13 @@ export const getSession = (roomId) => api.get(`/sessions/${roomId}`)
 export const getPlayback = (roomId) => api.get(`/sessions/${roomId}/playback`)
 export const endSession = (roomId) => api.post(`/sessions/${roomId}/end`)
 export const getDebrief = (roomId) => api.get(`/sessions/${roomId}/debrief`)
+export const generateDebrief = (sessionId) => api.post(`/debrief/${sessionId}/generate`)
 export const getAnalytics = (roomId) => api.get(`/sessions/${roomId}/analytics`)
+
+// Solutions
+export const getSolutions = (problemId, params) => api.get(`/solutions/${problemId}`, { params })
+export const createSolution = (problemId, data) => api.post(`/solutions/${problemId}`, data)
+export const upvoteSolution = (id) => api.put(`/solutions/${id}/upvote`)
 
 // Users
 export const getProfile = () => api.get('/users/profile')
@@ -180,6 +189,8 @@ export const resolveAdminReport = (id) => api.put(`/admin/reports/${id}/resolve`
 export const getPlans = () => api.get('/subscription/plans')
 export const getSubscriptionStatus = () => api.get('/subscription/status')
 export const createSubscription = (planId) => api.post('/subscription/create', { planId })
+export const verifyPayment = (data) => api.post('/subscription/verify-payment', data)
+export const getCancelInfo = () => api.post('/subscription/cancel-info')
 export const cancelSubscription = (immediately) => api.post('/subscription/cancel', { immediately })
 
 export default api

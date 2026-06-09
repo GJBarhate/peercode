@@ -1,6 +1,7 @@
 'use strict';
 
 const Session = require('../models/Session');
+const Snapshot = require('../models/Snapshot');
 const Problem = require('../models/Problem');
 const logger = require('../utils/logger');
 const { wrapCodeForTest, extractFunctionName, getLanguageId } = require('../utils/executeHelpers');
@@ -54,16 +55,29 @@ module.exports = function (io) {
       const timer = setTimeout(async () => {
         snapshotTimers.delete(timerKey);
         try {
+          // Find session to get sessionId
+          const session = await Session.findOne({ roomId });
+          if (!session) {
+            logger.warn(`Session not found for room ${roomId}, skipping snapshot`);
+            return;
+          }
+
+          // Create new Snapshot document
+          const snapshot = await Snapshot.create({
+            sessionId: session._id,
+            roomId,
+            timestamp: new Date(),
+            code,
+            language,
+            userId: socket.user.id,
+          });
+
+          // Update Session to reference the snapshot
           await Session.findOneAndUpdate(
             { roomId },
             {
               $push: {
-                snapshots: {
-                  timestamp: new Date(),
-                  code,
-                  language,
-                  userId: socket.user.id,
-                },
+                snapshots: snapshot._id,
               },
             },
             { new: true, upsert: false }
@@ -197,6 +211,12 @@ module.exports = function (io) {
         if (messages.length === 0) {
           roomChats.delete(roomId);
         }
+      }
+
+      // Clear pending snapshot timers for disconnected user's rooms
+      for (const [timerKey, timer] of snapshotTimers.entries()) {
+        clearTimeout(timer);
+        snapshotTimers.delete(timerKey);
       }
     });
   });

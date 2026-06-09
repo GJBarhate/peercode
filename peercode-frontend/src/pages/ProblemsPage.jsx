@@ -4,9 +4,8 @@ import { Search, Filter, X, LayoutGrid, List, CheckCircle, ArrowLeft, ArrowRight
 import Navbar from '../components/common/Navbar'
 import Badge from '../components/common/Badge'
 import Skeleton from '../components/common/Skeleton'
-import { getProblems, getProblemStats, getUserSolvedProblems, createRoom, getErrorMessage } from '../services/api'
+import { getProblems, getProblemStats, getUserSolvedProblems } from '../services/api'
 import { useAuth } from '../context/AuthContext'
-import toast from 'react-hot-toast'
 
 const PROBLEMS_PER_PAGE = 20
 const DIFFICULTIES = ['all', 'easy', 'medium', 'hard']
@@ -107,15 +106,8 @@ export default function ProblemsPage() {
     )
   }
 
-  const handlePractice = async (problem) => {
-    try {
-      toast.loading('Creating room...')
-      const { data } = await createRoom({ problemSlug: problem.slug })
-      toast.success(`Room created! Starting ${problem.title}...`)
-      navigate(`/room/${data.roomId}`)
-    } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to create room'))
-    }
+  const handlePractice = (problem) => {
+    navigate(`/problems/${problem.slug}`)
   }
 
   const activeFilterCount = (difficulty !== 'all' ? 1 : 0) + selectedCompanies.length + (tagSearch ? 1 : 0)
@@ -125,35 +117,35 @@ export default function ProblemsPage() {
   const hardPercent = problemStats.total > 0 ? (problemStats.hard / problemStats.total) * 100 : 0
 
   return (
-    <div className="min-h-screen bg-gray-950">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16">
 
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-100 mb-2">Problems</h1>
-          <p className="text-gray-400">Browse and practice algorithmic problems</p>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">Problems</h1>
+          <p className="text-gray-500 dark:text-gray-400">Browse and practice algorithmic problems</p>
         </div>
 
         {problemStats.total > 0 && (
-          <div className="mb-6 bg-gray-900 border border-gray-800 rounded-xl p-5">
+          <div className="mb-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5">
             <div className="flex items-center gap-4 flex-wrap">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-green-500/10 text-green-400 border border-green-500/20">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20">
                 <CheckCircle className="w-3.5 h-3.5" />
                 {solvedStats.easy} / {problemStats.easy} Easy
               </span>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
                 <CheckCircle className="w-3.5 h-3.5" />
                 {solvedStats.medium} / {problemStats.medium} Medium
               </span>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-red-500/10 text-red-400 border border-red-500/20">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20">
                 <CheckCircle className="w-3.5 h-3.5" />
                 {solvedStats.hard} / {problemStats.hard} Hard
               </span>
-              <span className="text-sm text-gray-400 ml-auto">
+              <span className="text-sm text-gray-500 dark:text-gray-400 ml-auto">
                 {solvedStats.total} / {problemStats.total} solved
               </span>
             </div>
-            <div className="mt-3 h-2 bg-gray-800 rounded-full overflow-hidden flex">
+            <div className="mt-3 h-2 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden flex">
               <div
                 className="h-full bg-green-500 transition-all duration-500"
                 style={{ width: `${(solvedStats.easy / problemStats.total) * 100}%` }}
@@ -167,7 +159,7 @@ export default function ProblemsPage() {
                 style={{ width: `${(solvedStats.hard / problemStats.total) * 100}%` }}
               />
             </div>
-            <div className="mt-2 h-1 bg-gray-800 rounded-full overflow-hidden flex">
+            <div className="mt-2 h-1 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden flex">
               <div
                 className="h-full bg-green-500/40"
                 style={{ width: `${easyPercent}%` }}
@@ -186,20 +178,20 @@ export default function ProblemsPage() {
 
         <div className="mb-6 space-y-4">
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1" role="radiogroup" aria-label="Filter by difficulty">
+            <div className="flex gap-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-1" role="radiogroup" aria-label="Filter by difficulty">
               {DIFFICULTIES.map(d => (
                 <button
                   key={d}
                   onClick={() => { setDifficulty(d); setCurrentPage(1) }}
                   role="radio"
                   aria-checked={difficulty === d}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium capitalize transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-950 ${
+                  className={`px-4 py-1.5 rounded-lg text-sm font-medium capitalize transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-50 dark:focus:ring-offset-gray-950 ${
                     difficulty === d
                       ? d === 'easy' ? 'bg-green-700 text-white focus:ring-green-500'
                         : d === 'medium' ? 'bg-amber-700 text-white focus:ring-amber-500'
                         : d === 'hard' ? 'bg-red-700 text-white focus:ring-red-500'
                         : 'bg-indigo-600 text-white focus:ring-indigo-500'
-                      : 'text-gray-400 hover:text-gray-200'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                   }`}
                 >
                   {d === 'all' ? 'All' : d}
@@ -208,19 +200,19 @@ export default function ProblemsPage() {
             </div>
 
             <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" aria-hidden="true" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 dark:text-gray-500" aria-hidden="true" />
               <input
                 type="text"
                 value={tagSearch}
                 onChange={e => { setTagSearch(e.target.value); setCurrentPage(1) }}
                 placeholder="Search by tag..."
                 aria-label="Search problems by tag"
-                className="w-full pl-9 pr-4 py-2 bg-gray-900 border border-gray-800 rounded-xl text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-950"
+                className="w-full pl-9 pr-4 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-sm text-gray-700 dark:text-gray-200 placeholder-gray-500 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-50 dark:focus:ring-offset-gray-950"
               />
               {tagSearch && (
                 <button
                   onClick={() => { setTagSearch(''); setCurrentPage(1) }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded"
                   aria-label="Clear tag search"
                 >
                   <X className="w-4 h-4" />
@@ -230,10 +222,10 @@ export default function ProblemsPage() {
 
             <button
               onClick={() => setShowFilters(v => !v)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-950 ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-50 dark:focus:ring-offset-gray-950 ${
                 showFilters || activeFilterCount > 0
                   ? 'bg-indigo-600 border-indigo-500 text-white focus:ring-indigo-500'
-                  : 'bg-gray-900 border-gray-800 text-gray-400 hover:text-gray-200 focus:ring-indigo-500'
+                  : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 focus:ring-indigo-500'
               }`}
               aria-label={`Toggle advanced filters${activeFilterCount > 0 ? ` (${activeFilterCount} active)` : ''}`}
             >
@@ -244,7 +236,7 @@ export default function ProblemsPage() {
               )}
             </button>
 
-            <div className="flex items-center gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1 ml-auto" role="radiogroup" aria-label="View mode">
+            <div className="flex items-center gap-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-1 ml-auto" role="radiogroup" aria-label="View mode">
               <button
                 onClick={() => setViewMode('table')}
                 role="radio"
@@ -252,7 +244,7 @@ export default function ProblemsPage() {
                 className={`p-2 rounded-lg transition-colors ${
                   viewMode === 'table'
                     ? 'bg-indigo-600 text-white'
-                    : 'text-gray-400 hover:text-gray-200'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                 }`}
                 aria-label="Table view"
               >
@@ -265,7 +257,7 @@ export default function ProblemsPage() {
                 className={`p-2 rounded-lg transition-colors ${
                   viewMode === 'grid'
                     ? 'bg-indigo-600 text-white'
-                    : 'text-gray-400 hover:text-gray-200'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                 }`}
                 aria-label="Card view"
               >
@@ -275,9 +267,9 @@ export default function ProblemsPage() {
           </div>
 
           {showFilters && (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl p-4">
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
               <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Companies</p>
+                <p className="text-xs font-semibold text-gray-600 dark:text-gray-500 uppercase tracking-wider mb-3">Companies</p>
                 <div className="flex flex-wrap gap-2">
                   {COMPANIES.map(c => (
                     <button
@@ -286,7 +278,7 @@ export default function ProblemsPage() {
                       className={`px-3 py-1 rounded-lg text-xs font-medium border transition-colors ${
                         selectedCompanies.includes(c)
                           ? 'bg-indigo-600 border-indigo-500 text-white'
-                          : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200'
+                          : 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                       }`}
                     >
                       {c}
@@ -308,18 +300,18 @@ export default function ProblemsPage() {
 
         {isLoading ? (
           viewMode === 'table' ? (
-            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-gray-800">
+                  <tr className="border-b border-gray-200 dark:border-gray-800">
                     {['#', 'Title', 'Difficulty', 'Tags', 'Acceptance', 'Solved'].map(h => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-500 uppercase tracking-wider">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {Array.from({ length: 10 }).map((_, i) => (
-                    <tr key={i} className="border-b border-gray-800/50">
+                    <tr key={i} className="border-b border-gray-200/50 dark:border-gray-800/50">
                       {Array.from({ length: 6 }).map((_, j) => (
                         <td key={j} className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>
                       ))}
@@ -331,7 +323,7 @@ export default function ProblemsPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="bg-gray-900 border border-gray-800 rounded-xl p-5 space-y-3">
+                <div key={i} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 space-y-3">
                   <Skeleton className="h-5 w-3/4" />
                   <div className="flex gap-2">
                     <Skeleton className="h-5 w-16" />
@@ -352,26 +344,26 @@ export default function ProblemsPage() {
           </div>
         ) : problems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <Search className="w-10 h-10 text-gray-600" />
-            <p className="text-gray-400">No problems found matching your filters.</p>
+            <Search className="w-10 h-10 text-gray-400 dark:text-gray-600" />
+            <p className="text-gray-500 dark:text-gray-400">No problems found matching your filters.</p>
             <button
               onClick={() => { setDifficulty('all'); setTagSearch(''); setSelectedCompanies([]); setCurrentPage(1) }}
-              className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors"
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
             >
               Clear filters
             </button>
           </div>
         ) : viewMode === 'table' ? (
-          <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-800">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-12">#</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Title</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Difficulty</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Tags</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Acceptance</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-16">Solved</th>
+                <tr className="border-b border-gray-200 dark:border-gray-800">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-500 uppercase tracking-wider w-12">#</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-500 uppercase tracking-wider">Title</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-500 uppercase tracking-wider w-24">Difficulty</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-500 uppercase tracking-wider">Tags</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-500 uppercase tracking-wider w-28">Acceptance</th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-600 dark:text-gray-500 uppercase tracking-wider w-16">Solved</th>
                 </tr>
               </thead>
               <tbody>
@@ -381,15 +373,15 @@ export default function ProblemsPage() {
                   return (
                     <tr
                       key={problem._id || problem.id}
-                      className={`border-b border-gray-800/50 hover:border-l-2 hover:border-l-indigo-500 transition-colors ${
-                        idx % 2 === 0 ? 'bg-[#11111f]' : 'bg-[#0a0a14]'
+                      className={`border-b border-gray-200/50 dark:border-gray-800/50 hover:border-l-2 hover:border-l-indigo-500 transition-colors ${
+                        idx % 2 === 0 ? 'bg-gray-50 dark:bg-[#11111f]' : 'bg-white dark:bg-[#0a0a14]'
                       }`}
                     >
-                      <td className="px-4 py-3 text-sm text-gray-500">{globalIndex}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-500">{globalIndex}</td>
                       <td className="px-4 py-3">
                         <Link
                           to={`/problems/${problem.slug}`}
-                          className="font-medium text-gray-100 hover:text-indigo-400 transition-colors"
+                          className="font-medium text-gray-900 dark:text-gray-100 hover:text-indigo-400 transition-colors"
                         >
                           {problem.title}
                         </Link>
@@ -402,20 +394,20 @@ export default function ProblemsPage() {
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {(problem.tags || []).slice(0, 3).map(t => (
-                            <span key={t} className="text-xs bg-indigo-900/40 text-indigo-400 px-2 py-0.5 rounded border border-indigo-800/50">
+                            <span key={t} className="text-xs bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400 px-2 py-0.5 rounded border border-indigo-300 dark:border-indigo-800/50">
                               {t}
                             </span>
                           ))}
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-400">
+                      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
                         {problem.acceptanceRate != null ? `${problem.acceptanceRate}%` : 'N/A'}
                       </td>
                       <td className="px-4 py-3 text-center">
                         {isSolved ? (
                           <CheckCircle className="w-5 h-5 text-green-400 mx-auto" />
                         ) : (
-                          <span className="text-gray-600">—</span>
+                          <span className="text-gray-400 dark:text-gray-600">—</span>
                         )}
                       </td>
                     </tr>
@@ -431,13 +423,13 @@ export default function ProblemsPage() {
               return (
                 <div
                   key={problem._id || problem.id}
-                  className="bg-gray-900 border border-gray-800 rounded-xl p-5 hover:border-gray-700 transition-colors flex flex-col gap-3"
+                  className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 hover:border-gray-300 dark:hover:border-gray-700 transition-colors flex flex-col gap-3"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <Link
                         to={`/problems/${problem.slug}`}
-                        className="font-semibold text-gray-100 hover:text-indigo-400 transition-colors leading-tight"
+                        className="font-semibold text-gray-900 dark:text-gray-100 hover:text-indigo-400 transition-colors leading-tight"
                       >
                         {problem.title}
                       </Link>
@@ -455,14 +447,14 @@ export default function ProblemsPage() {
 
                   <div className="flex flex-wrap gap-1.5">
                     {(problem.tags || []).slice(0, 3).map(t => (
-                      <span key={t} className="text-xs bg-indigo-900/40 text-indigo-400 px-2 py-0.5 rounded border border-indigo-800/50">
+                      <span key={t} className="text-xs bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-400 px-2 py-0.5 rounded border border-indigo-300 dark:border-indigo-800/50">
                         {t}
                       </span>
                     ))}
                   </div>
 
                   {problem.acceptanceRate != null && (
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-500">
                       <Users className="w-3 h-3" />
                       <span>{problem.acceptanceRate}% acceptance</span>
                     </div>
@@ -472,7 +464,7 @@ export default function ProblemsPage() {
                     onClick={() => handlePractice(problem)}
                     className="mt-auto w-full px-3 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
                   >
-                    Practice &rarr;
+                    Solve Problem
                   </button>
                 </div>
               )
@@ -482,14 +474,14 @@ export default function ProblemsPage() {
 
         {totalPages > 1 && (
           <div className="mt-6 flex items-center justify-between">
-            <p className="text-sm text-gray-400">
-              Showing <span className="font-medium text-gray-200">{startItem}</span>–<span className="font-medium text-gray-200">{endItem}</span> of <span className="font-medium text-gray-200">{totalProblems}</span> problems
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Showing <span className="font-medium text-gray-700 dark:text-gray-200">{startItem}</span>–<span className="font-medium text-gray-700 dark:text-gray-200">{endItem}</span> of <span className="font-medium text-gray-700 dark:text-gray-200">{totalProblems}</span> problems
             </p>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
-                className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium bg-gray-900 border border-gray-800 text-gray-400 hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <ArrowLeft className="w-4 h-4" />
                 Prev
@@ -504,7 +496,7 @@ export default function ProblemsPage() {
                   }, [])
                   .map((p, i) =>
                     p === '...' ? (
-                      <span key={`ellipsis-${i}`} className="px-2 text-gray-600 text-sm">...</span>
+                      <span key={`ellipsis-${i}`} className="px-2 text-gray-400 dark:text-gray-600 text-sm">...</span>
                     ) : (
                       <button
                         key={p}
@@ -512,7 +504,7 @@ export default function ProblemsPage() {
                         className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
                           currentPage === p
                             ? 'bg-indigo-600 text-white'
-                            : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
                         }`}
                       >
                         {p}
@@ -523,7 +515,7 @@ export default function ProblemsPage() {
               <button
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
-                className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium bg-gray-900 border border-gray-800 text-gray-400 hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 Next
                 <ArrowRight className="w-4 h-4" />

@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import { NoSessionsIllustration } from '../common/EmptyStateIllustrations'
 
 const CELL_SIZE = 11
 const CELL_GAP = 2
@@ -25,16 +26,14 @@ function TooltipPortal({ day, rect }) {
   if (!day || !rect) return null
   return createPortal(
     <div
-      className="fixed z-[9999] px-3 py-2 rounded-lg shadow-xl pointer-events-none"
+      className="fixed z-[9999] px-3 py-2 rounded-lg shadow-xl pointer-events-none bg-white dark:bg-[#181830] border border-gray-200 dark:border-white/[0.1]"
       style={{
         left: rect.left + rect.width / 2,
         top: rect.top - 8,
         transform: 'translate(-50%, -100%)',
-        background: '#181830',
-        border: '1px solid rgba(255,255,255,0.1)',
       }}
     >
-      <p className="text-xs text-[#f1f1f5] whitespace-nowrap">
+      <p className="text-xs text-gray-700 dark:text-[#f1f1f5] whitespace-nowrap">
         {formatDate(day.date)} · {day.count} session{day.count !== 1 ? 's' : ''}
       </p>
     </div>,
@@ -101,33 +100,29 @@ export default function ContributionHeatmap({ sessions = [] }) {
   }, [])
 
   return (
-    <div className="rounded-lg border border-white/[0.06] bg-[#11111f] p-6" ref={containerRef}>
-      {/* Summary line */}
+    <div className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-[#11111f] p-6" ref={containerRef}>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-[#f1f1f5]">Contribution Heatmap</h3>
-        <p className="text-xs text-[#5a5a72]">
+        <h3 className="text-lg font-bold text-gray-900 dark:text-[#f1f1f5]">Contribution Heatmap</h3>
+        <p className="text-xs text-gray-500 dark:text-[#5a5a72]">
           {total} sessions in the last year · Max: {maxDay}/day
         </p>
       </div>
 
       {sessions.length === 0 ? (
-        <div className="text-center py-12 text-[#5a5a72]">
-          <svg className="w-12 h-12 mx-auto mb-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-          </svg>
+        <div className="text-center py-12 text-gray-500 dark:text-[#5a5a72]">
+          <NoSessionsIllustration />
           <p className="text-sm">No sessions yet. Start practicing!</p>
         </div>
       ) : (
         <>
           <div className="overflow-x-auto pb-4">
-            {/* Month labels */}
             <div className="flex ml-[42px] mb-[2px]" style={{ gap: `${CELL_GAP}px` }}>
               {monthLabels.map((label, i) => {
                 const w = (label.weekIndex + 1 - (monthLabels[i - 1]?.weekIndex || 0)) * (CELL_SIZE + CELL_GAP) - CELL_GAP
                 return (
                   <span
                     key={i}
-                    className="text-[10px] text-[#5a5a72] font-medium leading-none"
+                    className="text-[10px] text-gray-500 dark:text-[#5a5a72] font-medium leading-none"
                     style={{ width: `${Math.max(w, CELL_SIZE)}px` }}
                   >
                     {MONTHS[label.month]}
@@ -137,24 +132,21 @@ export default function ContributionHeatmap({ sessions = [] }) {
             </div>
 
             <div className="flex" style={{ gap: `${CELL_GAP}px` }}>
-              {/* Day labels */}
               <div className="flex flex-col shrink-0 pt-[2px]" style={{ gap: `${CELL_GAP}px`, width: '36px' }}>
                 {DAY_INDICES.map((_, i) => (
                   <div
                     key={i}
-                    className="text-[10px] text-[#5a5a72] font-medium leading-none flex items-center"
+                    className="text-[10px] text-gray-500 dark:text-[#5a5a72] font-medium leading-none flex items-center"
                     style={{ height: `${CELL_SIZE}px` }}
                   >
                     {DAY_LABELS[i]}
                   </div>
                 ))}
-                {/* Spacer rows for alignment */}
                 {DAY_INDICES.length < 7 && (
                   <div style={{ height: `${(7 - DAY_INDICES.length) * (CELL_SIZE + CELL_GAP) - CELL_GAP}px` }} />
                 )}
               </div>
 
-              {/* Grid */}
               <div className="flex" style={{ gap: `${CELL_GAP}px` }}>
                 {weeks.map((week, i) => (
                   <div key={i} className="flex flex-col" style={{ gap: `${CELL_GAP}px` }}>
@@ -178,8 +170,7 @@ export default function ContributionHeatmap({ sessions = [] }) {
             </div>
           </div>
 
-          {/* Legend */}
-          <div className="flex items-center justify-end gap-1.5 mt-4 text-[10px] text-[#5a5a72]">
+          <div className="flex items-center justify-end gap-1.5 mt-4 text-[10px] text-gray-500 dark:text-[#5a5a72]">
             <span>Less</span>
             {COLORS.map((color, i) => (
               <div

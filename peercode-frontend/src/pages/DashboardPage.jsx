@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid, AreaChart, Area } from 'recharts';
-import { Trophy, Clock, Flame, TrendingUp, Plus, Calendar, Target, AlertCircle, Zap, Crown, Shield, TrendingDown, ArrowUpRight } from 'lucide-react';
+import { Trophy, Clock, Flame, TrendingUp, Plus, Calendar, Target, AlertCircle, Zap, Crown, Shield, TrendingDown, ArrowUpRight, Users } from 'lucide-react';
 import Navbar from '../components/common/Navbar';
 import ContributionHeatmap from '../components/dashboard/ContributionHeatmap';
+import { NoSessionsIllustration, NoDataIllustration } from '../components/common/EmptyStateIllustrations';
 import { getProfile, getUserSessions, createRoom, getProblems, getSubscriptionStatus } from '../services/api';
+
+const PLAN_NAMES = { free: 'Free', pro: 'Pro', premium: 'Premium', ultra: 'Ultra Premium' }
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -21,14 +24,14 @@ function StatCard({ icon: Icon, label, value, subtext, color = 'accent' }) {
 
   return (
     <div className={`rounded-lg border p-6 flex items-start gap-4 ${colorClasses[color]}`}>
-      <div className="p-3 rounded-lg bg-white/5 backdrop-blur-sm">
+      <div className="p-3 rounded-lg bg-gray-100 dark:bg-white/5 backdrop-blur-sm">
         <Icon className="w-6 h-6" />
       </div>
       <div className="flex-1">
-        <p className="text-sm text-text-tertiary mb-1">{label}</p>
+        <p className="text-sm text-gray-500 dark:text-[#5a5a72] mb-1">{label}</p>
         <div className="flex items-baseline gap-2">
-          <span className="text-3xl font-bold text-text-primary">{value}</span>
-          {subtext && <span className="text-xs text-text-tertiary">{subtext}</span>}
+          <span className="text-3xl font-bold text-gray-900 dark:text-[#f1f1f5]">{value}</span>
+          {subtext && <span className="text-xs text-gray-500 dark:text-[#5a5a72]">{subtext}</span>}
         </div>
       </div>
     </div>
@@ -95,10 +98,10 @@ function ActivityCalendar({ sessions }) {
   const getMaxDayCount = () => Math.max(...Object.values(activity), 0)
   
   return (
-    <div className="bg-surface rounded-lg p-6 border border-white/[0.06]">
+    <div className="bg-white dark:bg-gray-900 rounded-lg p-6 border border-gray-200 dark:border-white/[0.06]">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-text-primary">Contribution Activity (52 Weeks)</h3>
-        <div className="flex items-center gap-2 text-xs text-text-tertiary">
+        <h3 className="text-lg font-bold text-gray-900 dark:text-[#f1f1f5]">Contribution Activity (52 Weeks)</h3>
+        <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-[#5a5a72]">
           <span>{getTotalSessions()} sessions</span>
           <span>•</span>
           <span>Max: {getMaxDayCount()} day</span>
@@ -111,7 +114,7 @@ function ActivityCalendar({ sessions }) {
           {monthLabels.map((label, i) => (
             <div
               key={i}
-              className="text-xs text-text-tertiary font-medium"
+              className="text-xs text-gray-500 dark:text-[#5a5a72] font-medium"
               style={{ width: `${(label.weekIndex + 1 - (monthLabels[i - 1]?.weekIndex || 0)) * 16}px` }}
             >
               {monthNames[label.month]}
@@ -125,7 +128,7 @@ function ActivityCalendar({ sessions }) {
             {dayNames.map((day, i) => (
               <div
                 key={i}
-                className="w-6 h-3 text-xs text-text-tertiary flex items-center justify-center font-medium"
+                className="w-6 h-3 text-xs text-gray-500 dark:text-[#5a5a72] flex items-center justify-center font-medium"
               >
                 {day}
               </div>
@@ -151,7 +154,7 @@ function ActivityCalendar({ sessions }) {
       </div>
       
       {/* Legend */}
-      <div className="flex items-center justify-end gap-2 mt-4 text-xs text-text-tertiary">
+      <div className="flex items-center justify-end gap-2 mt-4 text-xs text-gray-500 dark:text-[#5a5a72]">
         <span>Less</span>
         <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#1f2937' }} />
         <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: '#86efac' }} />
@@ -162,8 +165,9 @@ function ActivityCalendar({ sessions }) {
       </div>
       
       {sessions.length === 0 && (
-        <div className="text-center text-text-tertiary text-sm py-8">
-          No sessions yet. Start practicing to build your contribution graph!
+        <div className="text-center py-8">
+          <NoSessionsIllustration />
+          <p className="text-gray-500 dark:text-[#5a5a72] text-sm">No sessions yet. Start practicing to build your contribution graph!</p>
         </div>
       )}
     </div>
@@ -185,8 +189,8 @@ function MonthlyStats({ sessions }) {
   const yMax = maxMonth + 2
 
   return (
-    <div className="bg-surface rounded-lg p-6 border border-white/[0.06]">
-      <h3 className="text-lg font-bold text-text-primary mb-4">Sessions by Month</h3>
+    <div className="bg-white dark:bg-gray-900 rounded-lg p-6 border border-gray-200 dark:border-white/[0.06]">
+      <h3 className="text-lg font-bold text-gray-900 dark:text-[#f1f1f5] mb-4">Sessions by Month</h3>
       <ResponsiveContainer width="100%" height={300}>
         <BarChart data={data}>
           <XAxis dataKey="name" stroke="#6b7280" style={{ fontSize: '12px' }} />
@@ -227,7 +231,7 @@ export default function DashboardPage() {
         setProfile(profileRes.data);
         setSessions(sessionsRes.data || []);
         setProblems(problemsRes.data || []);
-        setSubscription(subRes.data || { plan: 'free', status: 'active', usage: { hintsUsed: 0, analyzesUsed: 0 } });
+        setSubscription(subRes.data?.data || { plan: 'free', status: 'active', usage: { hints: { used: 0, limit: null }, analyzes: { used: 0, limit: null } } });
       } catch (err) {
         console.error('Dashboard error:', err);
         setError('Failed to load dashboard');
@@ -268,12 +272,12 @@ const sortedSessions = [...sessions].sort((a, b) =>
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-base">
+      <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a14]">
         <Navbar />
         <main className="max-w-7xl mx-auto px-6 py-8">
-          <div className="h-10 w-64 bg-white/5 rounded animate-pulse mb-8" />
+          <div className="h-10 w-64 bg-gray-200 dark:bg-white/5 rounded animate-pulse mb-8" />
           <div className="grid grid-cols-4 gap-6">
-            {[1,2,3,4].map(i => <div key={i} className="h-32 bg-white/5 rounded animate-pulse" />)}
+            {[1,2,3,4].map(i => <div key={i} className="h-32 bg-gray-200 dark:bg-white/5 rounded animate-pulse" />)}
           </div>
         </main>
       </div>
@@ -281,26 +285,56 @@ const sortedSessions = [...sessions].sort((a, b) =>
   }
 
   return (
-    <div className="min-h-screen bg-base">
+    <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a14]">
       <Navbar />
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-text-primary">Dashboard</h1>
-            <p className="text-text-secondary">Welcome back, {user?.username}</p>
+        <div>
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-[#f1f1f5]">Dashboard</h1>
+              <p className="text-gray-600 dark:text-[#9191a8]">Welcome back, {user?.username}</p>
+            </div>
           </div>
-          <Link
-            to="/problems"
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold bg-[#6d4df2] hover:bg-[#7c5ff5] text-white transition-all duration-150 active:scale-[0.98]"
-          >
-            <Zap className="w-4 h-4" />
-            Quick Start ⚡
-          </Link>
+
+          {/* Practice CTAs */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Link
+              to="/problems"
+              className="group relative overflow-hidden rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-600/20 to-indigo-800/10 p-6 hover:from-indigo-600/30 hover:to-indigo-800/20 transition-all duration-300 hover:shadow-lg hover:shadow-indigo-500/10"
+            >
+              <div className="flex items-start gap-4">
+                <div className="p-3 rounded-xl bg-indigo-600/20 group-hover:bg-indigo-600/30 transition-colors">
+                  <Zap className="w-6 h-6 text-indigo-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-gray-100 mb-1">Solve Problems Solo</h3>
+                  <p className="text-sm text-gray-400">Browse 20+ problems, practice at your own pace with AI hints & test runner</p>
+                </div>
+                <ArrowUpRight className="w-5 h-5 text-indigo-400 mt-2 flex-shrink-0 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+              </div>
+            </Link>
+
+            <Link
+              to="/find-partner"
+              className="group relative overflow-hidden rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-600/20 to-violet-800/10 p-6 hover:from-violet-600/30 hover:to-violet-800/20 transition-all duration-300 hover:shadow-lg hover:shadow-violet-500/10"
+            >
+              <div className="flex items-start gap-4">
+                <div className="p-3 rounded-xl bg-violet-600/20 group-hover:bg-violet-600/30 transition-colors">
+                  <Users className="w-6 h-6 text-violet-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-gray-100 mb-1">Practice with a Partner</h3>
+                  <p className="text-sm text-gray-400">Real-time collaborative coding with WebRTC video, shared editor & live chat</p>
+                </div>
+                <ArrowUpRight className="w-5 h-5 text-violet-400 mt-2 flex-shrink-0 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+              </div>
+            </Link>
+          </div>
         </div>
 
         {/* Stat Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard icon={Trophy} label="Current ELO" value={profile?.elo || 1200} color="accent" />
           <StatCard icon={Target} label="Sessions Completed" value={sessions.length} color="blue" />
           <StatCard icon={Flame} label="Current Streak" value={profile?.currentStreak || 0} subtext="days" color="orange" />
@@ -308,62 +342,62 @@ const sortedSessions = [...sessions].sort((a, b) =>
         </div>
 
         {/* Subscription Status */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="rounded-lg border border-white/[0.06] bg-surface p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-gray-900 p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-text-tertiary mb-1">Current Plan</p>
-                <p className="text-2xl font-bold text-text-primary capitalize">{subscription?.plan || 'free'}</p>
+                <p className="text-sm text-gray-500 dark:text-[#5a5a72] mb-1">Current Plan</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-[#f1f1f5]">{PLAN_NAMES[subscription?.plan] || 'Free'}</p>
               </div>
-              <div className={`p-3 rounded-lg ${subscription?.plan === 'free' ? 'bg-gray-600/20' : subscription?.plan === 'pro' ? 'bg-amber-500/20' : subscription?.plan === 'premium' ? 'bg-purple-500/20' : 'bg-pink-500/20'}`}>
-                <Crown className={`w-5 h-5 ${subscription?.plan === 'free' ? 'text-gray-400' : subscription?.plan === 'pro' ? 'text-amber-400' : subscription?.plan === 'premium' ? 'text-purple-400' : 'text-pink-400'}`} />
+              <div className={`p-3 rounded-lg ${subscription?.plan === 'free' ? 'bg-gray-200 dark:bg-gray-600/20' : subscription?.plan === 'pro' ? 'bg-amber-500/20' : subscription?.plan === 'premium' ? 'bg-purple-500/20' : 'bg-pink-500/20'}`}>
+                <Crown className={`w-5 h-5 ${subscription?.plan === 'free' ? 'text-gray-500 dark:text-gray-400' : subscription?.plan === 'pro' ? 'text-amber-400' : subscription?.plan === 'premium' ? 'text-purple-400' : 'text-pink-400'}`} />
               </div>
             </div>
             <div className="mt-4 flex items-center justify-between">
-              <span className="text-sm text-text-tertiary">Status</span>
-              <span className={`text-sm font-medium px-2 py-1 rounded ${subscription?.status === 'active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+              <span className="text-sm text-gray-500 dark:text-[#5a5a72]">Status</span>
+              <span className={`text-sm font-medium px-2 py-1 rounded ${subscription?.status === 'active' ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/20 text-amber-600 dark:text-amber-400'}`}>
                 {subscription?.status || 'active'}
               </span>
             </div>
           </div>
 
-          <div className="rounded-lg border border-white/[0.06] bg-surface p-6">
-            <p className="text-sm text-text-tertiary mb-1">AI Usage This Month</p>
+          <div className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-gray-900 p-6">
+            <p className="text-sm text-gray-500 dark:text-[#5a5a72] mb-1">AI Usage This Month</p>
             <div className="space-y-3 mt-2">
               <div>
                 <div className="flex justify-between text-xs mb-1">
-                  <span className="text-text-secondary">Hints</span>
-                  <span className="text-text-primary font-semibold">
-                    {subscription?.usage?.hintsUsed || 0} / {(subscription?.plan === 'ultra' || subscription?.plan === 'premium') ? '180' : subscription?.plan === 'pro' ? '70' : '30'}
-                  </span>
-                </div>
-                <div className="w-full bg-white/10 rounded-full h-1.5">
-                  <div className="bg-gradient-to-r from-indigo-500 to-purple-500 h-1.5 rounded-full" style={{ width: `${Math.min(100, ((subscription?.usage?.hintsUsed || 0) / (subscription?.plan === 'ultra' ? 180 : subscription?.plan === 'premium' ? 180 : subscription?.plan === 'pro' ? 70 : 30)) * 100)}%` }} />
+                  <span className="text-gray-600 dark:text-[#9191a8]">Hints</span>
+                  <span className="text-gray-900 dark:text-[#f1f1f5] font-semibold">
+                    {subscription?.usage?.hints?.used ?? 0} / {subscription?.usage?.hints?.limit != null ? subscription.usage.hints.limit : '∞'}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-white/10 rounded-full h-1.5">
+                    <div className="bg-gradient-to-r from-indigo-500 to-purple-500 h-1.5 rounded-full" style={{ width: `${subscription?.usage?.hints?.limit != null ? Math.min(100, ((subscription?.usage?.hints?.used ?? 0) / subscription.usage.hints.limit) * 100) : 5}%` }} />
                 </div>
               </div>
               <div>
                 <div className="flex justify-between text-xs mb-1">
-                  <span className="text-text-secondary">Analyzes</span>
-                  <span className="text-text-primary font-semibold">
-                    {subscription?.usage?.analyzesUsed || 0} / {(subscription?.plan === 'ultra' || subscription?.plan === 'premium') ? '180' : subscription?.plan === 'pro' ? '70' : '30'}
-                  </span>
-                </div>
-                <div className="w-full bg-white/10 rounded-full h-1.5">
-                  <div className="bg-gradient-to-r from-purple-500 to-pink-500 h-1.5 rounded-full" style={{ width: `${Math.min(100, ((subscription?.usage?.analyzesUsed || 0) / (subscription?.plan === 'ultra' ? 180 : subscription?.plan === 'premium' ? 180 : subscription?.plan === 'pro' ? 70 : 30)) * 100)}%` }} />
+                  <span className="text-gray-600 dark:text-[#9191a8]">Analyzes</span>
+                  <span className="text-gray-900 dark:text-[#f1f1f5] font-semibold">
+                    {subscription?.usage?.analyzes?.used ?? 0} / {subscription?.usage?.analyzes?.limit != null ? subscription.usage.analyzes.limit : '∞'}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-white/10 rounded-full h-1.5">
+                    <div className="bg-gradient-to-r from-purple-500 to-pink-500 h-1.5 rounded-full" style={{ width: `${subscription?.usage?.analyzes?.limit != null ? Math.min(100, ((subscription?.usage?.analyzes?.used ?? 0) / subscription.usage.analyzes.limit) * 100) : 5}%` }} />
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="rounded-lg border border-white/[0.06] bg-surface p-6">
-            <p className="text-sm text-text-tertiary mb-1">Subscription</p>
+          <div className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-gray-900 p-6">
+            <p className="text-sm text-gray-500 dark:text-[#5a5a72] mb-1">Subscription</p>
             <div className="space-y-2 mt-2">
               <Link to="/subscription" className="flex items-center justify-between w-full p-3 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-medium transition-all">
                 <span>Manage Subscription</span>
                 <ArrowUpRight className="w-4 h-4" />
               </Link>
               {subscription?.plan !== 'free' && (
-                <Link to="/subscription" className="flex items-center justify-between w-full p-3 rounded-lg border border-gray-700 hover:bg-white/5 text-text-primary font-medium transition-all">
+                <Link to="/subscription" className="flex items-center justify-between w-full p-3 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-white/5 text-gray-900 dark:text-[#f1f1f5] font-medium transition-all">
                   <span>Cancel / Change Plan</span>
                 </Link>
               )}
@@ -371,17 +405,17 @@ const sortedSessions = [...sessions].sort((a, b) =>
           </div>
 
           {subscription?.plan === 'free' && (
-            <div className="rounded-lg border border-white/[0.06] bg-gradient-to-br from-amber-500/10 to-orange-600/10 p-6">
+            <div className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-gradient-to-br from-amber-500/10 to-orange-600/10 p-6">
               <div className="flex items-center gap-3 mb-3">
                 <div className="p-2 bg-amber-500/20 rounded-lg">
                   <Crown className="w-5 h-5 text-amber-400" />
                 </div>
                 <div>
-                  <p className="font-semibold text-text-primary">Upgrade to Pro</p>
-                  <p className="text-xs text-text-tertiary">₹99/month • 70 hints + analyzes</p>
+                  <p className="font-semibold text-gray-900 dark:text-[#f1f1f5]">Upgrade to Pro</p>
+                  <p className="text-xs text-gray-500 dark:text-[#5a5a72]">₹99/month • 70 hints + analyzes</p>
                 </div>
               </div>
-              <p className="text-sm text-text-secondary mb-4">Unlock more AI hints, priority support & advanced analytics</p>
+              <p className="text-sm text-gray-600 dark:text-[#9191a8] mb-4">Unlock more AI hints, priority support & advanced analytics</p>
               <Link to="/subscription" className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold transition-colors">
                 Upgrade Now
                 <ArrowUpRight className="w-4 h-4" />
@@ -391,10 +425,10 @@ const sortedSessions = [...sessions].sort((a, b) =>
         </div>
 
         {/* Row 2: ELO Trend + Streak Card */}
-        <div className="grid grid-cols-1 lg:grid-cols-[65%_35%] gap-6 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[65%_35%] gap-6">
           {/* ELO Trend */}
-          <div className="rounded-lg border border-white/[0.06] bg-surface p-6">
-            <h3 className="text-lg font-bold text-text-primary mb-4">ELO Trend</h3>
+          <div className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-gray-900 p-6">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-[#f1f1f5] mb-4">ELO Trend</h3>
             {sortedSessions.length > 0 ? (() => {
               const eloData = sortedSessions.slice(-20).map((s, i) => {
                 const myElo = s.eloData?.find(e => e.userId === user?.id)
@@ -454,24 +488,27 @@ const sortedSessions = [...sessions].sort((a, b) =>
                 </ResponsiveContainer>
               )
             })() : (
-              <div className="h-60 flex items-center justify-center text-text-tertiary">No data yet</div>
+              <div className="h-60 flex flex-col items-center justify-center text-gray-500 dark:text-[#5a5a72]">
+                <NoDataIllustration />
+                <span>No data yet</span>
+              </div>
             )}
           </div>
 
           {/* Streak Card */}
-          <div className="rounded-lg border border-orange-400/20 bg-surface p-6">
+          <div className="rounded-lg border border-orange-400/20 bg-white dark:bg-gray-900 p-6">
             <div className="flex items-center gap-2 mb-4">
               <span className="text-2xl">🔥</span>
-              <h3 className="text-lg font-bold text-text-primary">Current Streak</h3>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-[#f1f1f5]">Current Streak</h3>
             </div>
             <div className="text-5xl font-bold text-orange-400 mb-4">{currentStreak}</div>
             <div className="mb-2">
-              <div className="w-full bg-white/10 rounded-full h-2">
+              <div className="w-full bg-gray-200 dark:bg-white/10 rounded-full h-2">
                 <div className="bg-orange-400 h-2 rounded-full transition-all duration-500" style={{ width: `${Math.min(100, streakProgress)}%` }} />
               </div>
             </div>
-            <p className="text-sm text-text-tertiary mb-4">{currentStreak}/{nextMilestone} days to next milestone</p>
-            <p className="text-sm text-text-tertiary mb-4">Longest streak: <span className="text-text-primary font-semibold">{longestStreak}</span> days</p>
+            <p className="text-sm text-gray-500 dark:text-[#5a5a72] mb-4">{currentStreak}/{nextMilestone} days to next milestone</p>
+            <p className="text-sm text-gray-500 dark:text-[#5a5a72] mb-4">Longest streak: <span className="text-gray-900 dark:text-[#f1f1f5] font-semibold">{longestStreak}</span> days</p>
             {!hasSessionToday && (
               <p className="text-sm text-orange-400 font-medium">Keep it up! Practice today to maintain your streak.</p>
             )}
@@ -479,45 +516,45 @@ const sortedSessions = [...sessions].sort((a, b) =>
         </div>
 
         {/* Row 3: Monthly Sessions */}
-        {sortedSessions.length > 0 && <div className="mb-8"><MonthlyStats sessions={sortedSessions} /></div>}
+        {sortedSessions.length > 0 && <MonthlyStats sessions={sortedSessions} />}
 
         {/* Row 4: Rank, Quick Links, Next Problem */}
-        <div className="grid grid-cols-1 lg:grid-cols-[40%_30%_40%] gap-6 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-[40%_30%_40%] gap-6">
           {/* Your Rank */}
-          <div className="rounded-lg border border-white/[0.06] bg-surface p-6">
-            <h3 className="text-lg font-bold text-text-primary mb-4">Your Rank</h3>
+          <div className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-gray-900 p-6">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-[#f1f1f5] mb-4">Your Rank</h3>
             <div className="text-3xl font-bold text-accent mb-2">Top {percentile}%</div>
-            <div className="w-full bg-white/10 rounded-full h-2 mb-2">
+            <div className="w-full bg-gray-200 dark:bg-white/10 rounded-full h-2 mb-2">
               <div className="bg-accent h-2 rounded-full" style={{ width: `${percentile}%` }} />
             </div>
-            <p className="text-sm text-text-tertiary">ELO: {elo}</p>
+            <p className="text-sm text-gray-500 dark:text-[#5a5a72]">ELO: {elo}</p>
           </div>
 
           {/* Quick Links */}
-          <div className="rounded-lg border border-white/[0.06] bg-surface p-6">
-            <h3 className="text-lg font-bold text-text-primary mb-4">Quick Links</h3>
+          <div className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-gray-900 p-6">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-[#f1f1f5] mb-4">Quick Links</h3>
             <div className="flex flex-col gap-3">
-              <Link to="/problems" className="flex items-center justify-between text-text-primary hover:text-accent transition-colors">
+              <Link to="/problems" className="flex items-center justify-between text-gray-900 dark:text-[#f1f1f5] hover:text-accent transition-colors">
                 Practice Problems <span className="text-accent">→</span>
               </Link>
-              <Link to="/tracks" className="flex items-center justify-between text-text-primary hover:text-accent transition-colors">
+              <Link to="/tracks" className="flex items-center justify-between text-gray-900 dark:text-[#f1f1f5] hover:text-accent transition-colors">
                 View Tracks <span className="text-accent">→</span>
               </Link>
-              <Link to="/profile" className="flex items-center justify-between text-text-primary hover:text-accent transition-colors">
+              <Link to="/profile" className="flex items-center justify-between text-gray-900 dark:text-[#f1f1f5] hover:text-accent transition-colors">
                 My Profile <span className="text-accent">→</span>
               </Link>
             </div>
           </div>
 
           {/* Next Problem */}
-          <div className="rounded-lg border border-white/[0.06] bg-surface p-6">
-            <h3 className="text-lg font-bold text-text-primary mb-4">Next Problem</h3>
+          <div className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-gray-900 p-6">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-[#f1f1f5] mb-4">Next Problem</h3>
             {randomProblem ? (
-              <Link to={`/problems/${randomProblem._id}`} className="flex items-center justify-between text-text-primary hover:text-accent transition-colors">
+              <Link to={`/problems/${randomProblem._id}`} className="flex items-center justify-between text-gray-900 dark:text-[#f1f1f5] hover:text-accent transition-colors">
                 <span>{randomProblem.title}</span> <span className="text-accent">→</span>
               </Link>
             ) : (
-              <Link to="/problems" className="flex items-center justify-between text-text-primary hover:text-accent transition-colors">
+              <Link to="/problems" className="flex items-center justify-between text-gray-900 dark:text-[#f1f1f5] hover:text-accent transition-colors">
                 Practice Problems <span className="text-accent">→</span>
               </Link>
             )}
@@ -525,46 +562,46 @@ const sortedSessions = [...sessions].sort((a, b) =>
         </div>
 
         {/* Heatmap */}
-        {sortedSessions.length > 0 && <div className="mb-8"><ContributionHeatmap sessions={sortedSessions} /></div>}
+        {sortedSessions.length > 0 && <ContributionHeatmap sessions={sortedSessions} />}
 
         {/* Recent Sessions */}
-        <div className="rounded-lg border border-white/[0.06] bg-surface p-6">
-          <h3 className="text-lg font-bold text-text-primary mb-4">Recent Sessions</h3>
+        <div className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-gray-900 p-6">
+          <h3 className="text-lg font-bold text-gray-900 dark:text-[#f1f1f5] mb-4">Recent Sessions</h3>
           {sortedSessions.length === 0 ? (
-            <div className="text-center py-12">
-              <Zap className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-              <p className="text-text-tertiary mb-4">No sessions yet. Start practicing to see your progress!</p>
-              <Link to="/match" className="btn-primary">Start Practicing</Link>
-            </div>
+              <div className="text-center py-12">
+                <NoSessionsIllustration />
+                <p className="text-gray-500 dark:text-[#5a5a72] mb-4">No sessions yet. Start practicing to see your progress!</p>
+                <Link to="/match" className="btn-primary">Start Practicing</Link>
+              </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                    <tr className="border-b border-white/[0.06]">
-                      <th className="text-left py-3 px-4 font-semibold text-text-tertiary">Problem</th>
-                      <th className="text-left py-3 px-4 font-semibold text-text-tertiary">Status</th>
-                      <th className="text-left py-3 px-4 font-semibold text-text-tertiary">Duration</th>
-                      <th className="text-right py-3 px-4 font-semibold text-text-tertiary">ELO CHANGE</th>
-                      <th className="text-right py-3 px-4 font-semibold text-text-tertiary">ACTION</th>
+                    <tr className="border-b border-gray-200 dark:border-white/[0.06]">
+                      <th className="text-left py-3 px-4 font-semibold text-gray-500 dark:text-[#5a5a72]">Problem</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-500 dark:text-[#5a5a72]">Status</th>
+                      <th className="text-left py-3 px-4 font-semibold text-gray-500 dark:text-[#5a5a72]">Duration</th>
+                      <th className="text-right py-3 px-4 font-semibold text-gray-500 dark:text-[#5a5a72]">ELO CHANGE</th>
+                      <th className="text-right py-3 px-4 font-semibold text-gray-500 dark:text-[#5a5a72]">ACTION</th>
                     </tr>
                 </thead>
                 <tbody>
                   {sortedSessions.slice(0, 10).map(s => (
-                    <tr key={s._id} className="border-b border-white/[0.06] hover:bg-white/[0.02]">
-                      <td className="py-3 px-4 text-text-primary">{s.problemSnapshot?.title || 'Unknown'}</td>
+                    <tr key={s._id} className="border-b border-gray-200 dark:border-white/[0.06] hover:bg-gray-50 dark:hover:bg-white/[0.02]">
+                      <td className="py-3 px-4 text-gray-900 dark:text-[#f1f1f5]">{s.problemSnapshot?.title || 'Unknown'}</td>
                       <td className="py-3 px-4">
                         <span className={s.testResults?.allPassed ? 'text-green-400' : 'text-red-400'}>
                           {s.testResults?.allPassed ? '✓ Accepted' : '✗ Wrong Answer'}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-text-tertiary">{Math.round((s.duration || 0) / 60)}m</td>
+                      <td className="py-3 px-4 text-gray-500 dark:text-[#5a5a72]">{Math.round((s.duration || 0) / 60)}m</td>
                       <td className="py-3 px-4 text-right">
                         {s.eloDelta != null ? (
                           <span className={s.eloDelta >= 0 ? 'text-green-400' : 'text-red-400'}>
                             {s.eloDelta >= 0 ? '+' : ''}{s.eloDelta}
                           </span>
                         ) : (
-                          <span className="text-text-tertiary">—</span>
+                          <span className="text-gray-500 dark:text-[#5a5a72]">—</span>
                         )}
                       </td>
                       <td className="py-3 px-4 text-right">

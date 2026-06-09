@@ -121,6 +121,72 @@ After every session, an Agenda background job triggers Gemini to generate a stru
 
 ---
 
+## 🆕 Recent Improvements
+
+### WebRTC Screen Sharing (Rewrite)
+- **Replaced `addTrack` approach** with `replaceTrack` — standard WebRTC API for swapping camera ↔ screen share tracks
+- **Forced stream refresh** — `refreshRemoteStreamsForPeers()` creates a brand-new `MediaStream` from the receiver's current track on every screen share start/stop, ensuring the remote video element always picks up the latest content
+- **Socket-side refresh** — `onScreenShareStarted`/`onScreenShareStopped` handlers now call `refreshRemoteStreamsForPeers()` on the remote peer, not just updating `peerMediaStates`
+- **Stable video key** — video element uses `key={videoKey}` that changes between `'camera'` and `'screen'`, forcing React to re-mount the `<video>` element with fresh `srcObject`
+- **Async stopScreenShare** — fixed `await` inside non-async `useCallback` that caused runtime `ReferenceError`
+
+### Video Panel — Google Meet‑style Layout
+- **Remote user** fills the main area with `object-cover`
+- **Self-view** is a 128×96 PIP in the bottom-right corner
+- **Screen share** displays with `object-contain` + green border + "Screen Share" badge
+- **Waiting state** shows "Waiting for partner to join..." when no remote stream
+- **Maximize/Restore** button expands video to a centered 80vw×80vh overlay with dark backdrop
+- **Mute/Video guards** — toggles check for track existence and show `toast.error` if no microphone/camera available
+
+### Room & Peer Connection Stability
+- **`hangUp` cleanup fixed** — `useEffect(() => hangUp(), [socket, hangUp])` previously destroyed all peer connections whenever `roomId` changed, before they could establish. Changed to `hangUpRef` with empty deps so cleanup only runs on component unmount
+- **`createPeerConnection` dedup** — returns existing PC if already created for a peer, preventing overwrite during renegotiation
+- **`syncLocalStream`** called BEFORE `socket.emit('join-room')` so `localStreamRef` is set before signaling events arrive
+- **`getUserMedia` now requests both tracks** — `{ video: true, audio: true }` always, then applies `track.enabled` for mute/disable. Previously used `{ video: !isVideoOff }` which created NO video track when off, making `toggleVideo` a no-op
+
+### Backend Signaling Improvements
+- **`participant-joined` dedup** — only emitted when `!alreadyInRoom`, preventing duplicate participants from matching queue + lobby join
+- **`user-mic-status` event** — renamed from `media-state-changed` with `userId` in payload for stable identification across reconnects
+- **`hints` and `editorial`** fields added to `problem-updated` broadcast payload
+
+### Matchmaking (Matching Queue)
+- **Role compatibility** — `'any'` (Either role) now correctly matches all roles
+- **Topic case normalized** — topics lowercased before comparison
+- **Server-side 60s timeout** — emits `queue-timeout` event and removes from queue
+- **`matchedRef` guard** — prevents stale cleanup from emitting `queue-leave` after a match
+- **`mountedRef` reset** — re-initialized on socket reconnect
+
+### Admin Problem Management
+- **Add/Edit Problem modal** — full form with Title, Slug, Difficulty, Description, Tags, Companies, Constraints, Hints, Editorial, dynamic Examples & Test Cases, per-language Code Templates (starter code, stubs, test harness), Time/Memory limits
+- **Validation** — inline error messages, required field checks, slug format validation, minimum example/test case requirements
+- **Archive/Restore toggle** — single button switches between archiving (`isActive: false`) and restoring (`isActive: true`)
+- **Problem lookup** — backend `getProblem` now accepts both `slug` AND `_id` (ObjectId hex string)
+
+### User Solutions (LeetCode‑style)
+- **New `Solution` model** — `{ problem, user, code, language, explanation, upvotes, createdAt }`
+- **API endpoints** — `GET/POST /api/solutions/:problemId`, `PUT /api/solutions/:id/upvote`
+- **Solutions tab** in ProblemPanel — submit code with language selector + explanation, view all solutions sorted by upvotes
+- **Report button** — always visible in ProblemPanel tab bar and ProblemDetailPage toolbar, opens inline report modal with type dropdown + description
+
+### Track Pages — Complete Redesign
+- **Tracks listing page** — hero header with gradient + glow, search bar with real-time filtering, company-themed card gradients, hover scale animation, progress bars with gradient fill, status buttons (Start/Continue/Completed), empty/no-results states
+- **Track detail page** — hero header with gradient, company badge, difficulty distribution bar, problem search/filter, animated progress bar, clickable problem cards with hover effects, difficulty-colored badges, tag pills, completed state with green glow
+
+### Debrief Page — Full Rewrite
+- **Auto-generation** — on 404 (no debrief yet), the page now calls `GET /sessions/:roomId` to get the session `_id`, then `POST /debrief/:sessionId/generate` to trigger AI generation, then polls every 10s until ready
+- **Loading UI** — animated spinner with pulsing rings, attempt counter, status messages
+- **Redesigned display** — hero section with score circle, summary quote block, performance metric bars, "What Went Well" / "Areas to Improve" columns, complexity cards, study next numbered list, gradient "Solve Again" button
+- **Backend** — added missing `auth` middleware to debrief routes, flattened `scores` sub-object to top-level fields, added `tips`, `timeComplexity`, `spaceComplexity`, `duration` mappings
+
+### Dashboard — Layout Fix
+- Replaced individual `mb-8` margins on every section with `space-y-6` on the main container, fixing content being cut off below the viewport
+
+### Seed Data
+- **20 problems** seeded via `problemSeed.js` (two-sum, valid-parentheses, etc.)
+- **4 tracks** seeded via `trackSeed.js` (Amazon SDE-1, Google L4, DP Mastery, Interview Ready Foundations)
+
+---
+
 ## 🏗️ Architecture
 
 ### System Infrastructure
@@ -297,7 +363,8 @@ peercode-backend/
     │   ├── Track.js             ← Company problem playlists with order and frequencyNote
     │   ├── UserTrackProgress.js ← Compound index {user, track}; completedProblems sub-array
     │   ├── AiDebrief.js         ← 4 scored categories + overallReadiness + strengths/improvements
-    │   └── ProblemReport.js     ← Issue reports categorized by type; resolved flag + admin resolver
+    │   ├── ProblemReport.js     ← Issue reports categorized by type; resolved flag + admin resolver
+    │   └── Solution.js          ← User-submitted code with language, explanation, upvotes
     │
     ├── routes/
     │   ├── auth.js              ← POST register / login / refresh / logout
@@ -313,7 +380,8 @@ peercode-backend/
     │   ├── tracks.js            ← List, single, user progress, complete-problem
     │   ├── admin.js             ← Stats, user management, problem CRUD, reports (adminAuth guard)
     │   ├── geminiKey.js         ← Live validation against Google API
-    │   └── subscription.js      ← Plans, status, create, cancel, Razorpay webhook
+    │   ├── subscription.js      ← Plans, status, create, cancel, Razorpay webhook
+    │   └── solutions.js        ← List, create, upvote user-submitted solutions
     │
     ├── middleware/
     │   ├── auth.js              ← JWT Bearer → full Mongoose User document on req.user
@@ -373,13 +441,13 @@ peercode-frontend/src/
 │   ├── DashboardPage.jsx      ← ELO trend, streak, heatmap, session list, subscription cards
 │   ├── RoomPage.jsx           ← Interview room: RoomLobby → RoomLayout (lobby phase → room phase)
 │   ├── ProblemsPage.jsx       ← Filterable problem grid with difficulty/tag/company filters + pagination
-│   ├── ProblemDetailPage.jsx  ← Problem statement + Monaco editor + TestCaseRunner
+│   ├── ProblemDetailPage.jsx  ← Problem statement + Monaco editor + TestCaseRunner + Report button
 │   ├── ProfilePage.jsx        ← Username/password settings, achievements, GeminiKeyManager
 │   ├── PlaybackPage.jsx       ← Session replay: PlaybackTimeline + PlaybackPlayer + SessionAnalytics
-│   ├── DebriefPage.jsx        ← AI debrief scores polled every 10s until the Agenda job finishes
-│   ├── TracksPage.jsx         ← Company learning track cards with per-track progress bars
-│   ├── TrackDetailPage.jsx    ← Track problem list with completion badges and practice links
-│   ├── AdminPage.jsx          ← 5-tab panel: overview / subscriptions / users / problems / reports
+│   ├── DebriefPage.jsx        ← AI debrief with auto-generation, performance metrics, strengths/improvements
+│   ├── TracksPage.jsx         ← Company learning track cards with search, gradients, progress bars
+│   ├── TrackDetailPage.jsx    ← Problem list with difficulty bar, search, tags, hover effects
+│   ├── AdminPage.jsx          ← 5-tab panel: overview / subscriptions / users / problems (add/edit/restore) / reports
 │   ├── MatchPage.jsx          ← Thin wrapper rendering MatchingQueue component
 │   ├── SubscriptionPage.jsx   ← Plan comparison cards, billing toggle, usage bars, Razorpay checkout
 │   └── NotFoundPage.jsx       ← 404 with home link
@@ -400,8 +468,11 @@ peercode-frontend/src/
 │   │   ├── ShareRoomModal.jsx    ← Copy room link + room ID with one click
 │   │   └── TestResultsPanel.jsx  ← End-of-session test results summary + per-case detail
 │   │
+│   ├── admin/
+│   │   └── AddEditProblemModal.jsx ← Full problem creation/editing form with validation, code templates
+│   │
 │   ├── video/
-│   │   ├── VideoPanel.jsx        ← Floating draggable video tiles container with controls overlay
+│   │   ├── VideoPanel.jsx        ← Google Meet-style: remote fills main area, self-view PIP, screen-share view
 │   │   ├── VideoTile.jsx         ← Single video stream or avatar placeholder with status badges
 │   │   └── VideoControls.jsx     ← Mute / camera off / screen-share / hang-up buttons
 │   │
@@ -410,9 +481,11 @@ peercode-frontend/src/
 │   │   └── GeminiKeyManager.jsx  ← Key input, live Google API validation on blur, save/remove
 │   │
 │   ├── problems/
-│   │   ├── ProblemPanel.jsx      ← Description / hints / editorial tab switcher
+│   │   ├── ProblemPanel.jsx      ← Description / hints / editorial / solutions tabs + Report button
+│   │   ├── ReportProblemModal.jsx ← Issue type dropdown + description form for reporting problems
 │   │   ├── TestCaseRunner.jsx    ← Per-test-case grid; auto-marks problem solved on all-pass
 │   │   ├── ProblemBrowser.jsx    ← Full-screen search + difficulty/tag/company filter modal
+│   │   ├── ProblemList.jsx       ← Problem grid with difficulty badges and action buttons
 │   │   ├── ExecutionOutput.jsx   ← Simple stdin/stdout execution result display
 │   │   └── BestPracticesPanel.jsx ← Language-specific coding tips panel
 │   │
@@ -420,6 +493,14 @@ peercode-frontend/src/
 │   │   ├── PlaybackTimeline.jsx  ← Scrubber with play/pause + speed control (0.5× to 4×)
 │   │   ├── PlaybackPlayer.jsx    ← Read-only Monaco editor showing snapshot at current index
 │   │   └── SessionAnalytics.jsx  ← Recharts AreaChart + approach count + pause segment markers
+│   │
+│   ├── chat/
+│   │   └── ChatPanel.jsx          ← Real-time messaging with socket.io, message history, auto-scroll
+│   │
+│   ├── subscription/
+│   │   ├── SubscriptionModal.jsx  ← Plan upgrade comparison modal
+│   │   ├── UpgradeConfirmModal.jsx ← Razorpay payment confirmation
+│   │   └── CancelSubscriptionModal.jsx ← Cancellation flow with confirmation
 │   │
 │   ├── dashboard/
 │   │   └── ContributionHeatmap.jsx ← GitHub-style 52-week activity grid built with Recharts
@@ -431,6 +512,12 @@ peercode-frontend/src/
 │       ├── ErrorBoundary.jsx      ← Class component catching render errors with retry button
 │       ├── LoadingButton.jsx      ← Button with inline spinner for async actions
 │       ├── Badge.jsx              ← Styled difficulty/status badge (easy/medium/hard/custom)
+│       ├── CompanyLogo.jsx        ← Inline SVG logos for Amazon, Google, Meta, Apple, Microsoft, Netflix, Uber, Airbnb
+│       ├── EmptyStateIllustrations.jsx ← SVG illustrations for empty states (tracks, sessions, data)
+│       ├── HeroIllustration.jsx   ← Hero image for the HomePage logged-in view
+│       ├── KeyboardShortcutsCheatSheet.jsx ← ? key overlay showing all shortcuts
+│       ├── LogoutConfirmModal.jsx ← Confirmation dialog before logout
+│       └── Skeleton.jsx           ← Loading placeholder components with pulse animation
 │       └── Skeleton.jsx           ← Pulsing gray placeholder for loading states
 │
 ├── context/

@@ -13,17 +13,12 @@ export function AuthProvider({ children }) {
   const setAccessToken = useCallback((token) => {
     setAccessTokenState(token)
     setApiToken(token)
-    if (token) {
-      localStorage.setItem('accessToken', token)
-    } else {
-      localStorage.removeItem('accessToken')
-    }
   }, [])
 
   const clearAllSessions = useCallback(() => {
-    // Clear all localStorage items
-    localStorage.clear()
-    
+    // Clear only PeerCode-specific localStorage items
+    localStorage.removeItem('peercode_gemini_key')
+
     // Clear all cookies
     document.cookie.split(';').forEach(c => {
       const cookieName = c.split('=')[0].trim()
@@ -32,12 +27,12 @@ export function AuthProvider({ children }) {
         document.cookie = `${cookieName}=;expires=Thu, 01 Jan 1970 00:00:00 UTC;path=/`
       }
     })
-    
+
     // Clear session storage
     sessionStorage.clear()
   }, [])
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(async (navigate) => {
     try {
       await axios.post(
         `${API_BASE_URL}/auth/logout`,
@@ -45,12 +40,18 @@ export function AuthProvider({ children }) {
         { withCredentials: true }
       )
     } catch (_) {}
-    
+
     // Clear all sessions before redirecting
     clearAllSessions()
     setUser(null)
     setAccessToken(null)
-    window.location.href = '/'
+
+    // Use React Router navigation if provided, otherwise fallback to window.location
+    if (navigate) {
+      navigate('/')
+    } else {
+      window.location.href = '/'
+    }
   }, [setAccessToken, clearAllSessions])
 
   const refreshToken = useCallback(async () => {
@@ -83,33 +84,25 @@ export function AuthProvider({ children }) {
 
     async function init() {
       try {
-        // Try to use stored token first
-        const storedToken = localStorage.getItem('accessToken')
-        if (storedToken && mounted) {
-          setAccessTokenState(storedToken)
-          setApiToken(storedToken)
-          
-          // Try to refresh for latest user data and token validity check
-          try {
-            const response = await axios.post(
-              `${API_BASE_URL}/auth/refresh`,
-              {},
-              { 
-                withCredentials: true,
-                timeout: 5000 // 5 second timeout to prevent hanging
-              }
-            )
-            if (mounted) {
-              setAccessToken(response.data.accessToken)
-              setUser(response.data.user)
+        // Try to refresh using httpOnly cookie to get a new access token
+        try {
+          const response = await axios.post(
+            `${API_BASE_URL}/auth/refresh`,
+            {},
+            {
+              withCredentials: true,
+              timeout: 5000 // 5 second timeout to prevent hanging
             }
-          } catch (refreshErr) {
-            logger.warn('Token refresh failed during init:', refreshErr.message)
-            // If refresh fails, stored token might be expired
-            // Keep token state but set user to null to force re-login
-            if (mounted) {
-              setUser(null)
-            }
+          )
+          if (mounted) {
+            setAccessToken(response.data.accessToken)
+            setUser(response.data.user)
+          }
+        } catch (refreshErr) {
+          logger.warn('Token refresh failed during init:', refreshErr.message)
+          // If refresh fails, user is not authenticated
+          if (mounted) {
+            setUser(null)
           }
         }
       } catch (err) {
@@ -178,7 +171,7 @@ export function AuthProvider({ children }) {
   }, [setAccessToken, clearAllSessions])
 
   return (
-    <AuthContext.Provider value={{ user, setUser, accessToken, isLoading, login, register, logout, refreshToken }}>
+    <AuthContext.Provider value={{ user, setUser, accessToken, setAccessToken, isLoading, login, register, logout, refreshToken }}>
       {children}
     </AuthContext.Provider>
   )

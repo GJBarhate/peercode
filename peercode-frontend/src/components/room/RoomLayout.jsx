@@ -12,7 +12,7 @@ import AIHintPanel from '../gemini/AIHintPanel'
 import InterviewTimer from './InterviewTimer'
 import InterviewerNotes from './InterviewerNotes'
 import ParticipantList from './ParticipantList'
-import { LayoutGrid, MessageSquare, Users, ChevronRight, ChevronLeft, Lightbulb, Search, X, MessageCircle, XCircle } from 'lucide-react'
+import { LayoutGrid, MessageSquare, Users, ChevronRight, ChevronLeft, Lightbulb, Search, X, MessageCircle, XCircle, Video } from 'lucide-react'
 import { getProblems, getErrorMessage } from '../../services/api'
 import { STARTER_CODE } from '../../utils/codeTemplates'
 import toast from 'react-hot-toast'
@@ -24,6 +24,10 @@ export default function RoomLayout({
   socket,
   localStream,
   remoteStreams,
+  peerMediaStates,
+  isScreenSharing,
+  onScreenShare,
+  onStopScreenShare,
   language,
   setLanguage,
   editorRef,
@@ -46,6 +50,9 @@ export default function RoomLayout({
   const [showProblemBrowser, setShowProblemBrowser] = useState(false)
   const [runNonce, setRunNonce] = useState(0)
   const [externalResults, setExternalResults] = useState(null)
+  const [isRunning, setIsRunning] = useState(false)
+  const [videoControlsOpen, setVideoControlsOpen] = useState(true)
+  const [videoMaximized, setVideoMaximized] = useState(false)
   const codeRef = useRef(STARTER_CODE[language] || '')
   const searchTimeoutRef = useRef(null)
 
@@ -92,6 +99,7 @@ export default function RoomLayout({
     socket.on('run-code-result', onRunCodeResult)
     return () => {
       socket.off('problem-updated', onProblemUpdated)
+      socket.off('problem_changed', onProblemChanged)
       socket.off('run-code-result', onRunCodeResult)
     }
   }, [socket])
@@ -230,22 +238,69 @@ export default function RoomLayout({
         </div>
       )}
 
-      {/* Floating video panel - always visible when streams exist */}
+      {/* Floating video panel with controls — bottom-center dock to avoid overlapping chat */}
       {(localStream || Object.keys(remoteStreams).length > 0) && (
-        <div className="fixed bottom-4 right-4 z-40 w-72 shadow-2xl rounded-xl border border-gray-800 overflow-hidden" style={{ height: '220px' }}>
-          <VideoPanel
-            roomId={roomId}
-            socket={socket}
-            username={user?.username}
-            localStream={localStream}
-            remoteStreams={remoteStreams}
-            onEndCall={onEndCall}
-          />
-        </div>
+        <>
+          {videoMaximized && (
+            <div
+              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+              onClick={() => setVideoMaximized(false)}
+            />
+          )}
+          <div
+            className={`fixed z-50 transition-all duration-300 ease-in-out ${
+              videoControlsOpen
+                ? 'opacity-100 scale-100'
+                : 'opacity-0 scale-90 pointer-events-none'
+            } ${
+              videoMaximized
+                ? 'inset-0 flex items-center justify-center p-8'
+                : 'bottom-4 left-1/2 -translate-x-1/2'
+            }`}
+          >
+            <div
+              className={`shadow-2xl rounded-xl border border-gray-800 overflow-hidden bg-gray-950 ${
+                videoMaximized
+                  ? 'w-full max-w-5xl h-[80vh]'
+                  : 'w-80'
+              }`}
+              style={videoMaximized ? {} : { height: '300px' }}
+              onClick={e => e.stopPropagation()}
+            >
+              <VideoPanel
+                roomId={roomId}
+                socket={socket}
+                userId={user?.id}
+                username={user?.username}
+                localStream={localStream}
+                remoteStreams={remoteStreams}
+                peerMediaStates={peerMediaStates}
+                participants={participants}
+                isScreenSharing={isScreenSharing}
+                isMaximized={videoMaximized}
+                onEndCall={onEndCall}
+                onMinimize={() => setVideoControlsOpen(false)}
+                onMaximize={() => setVideoMaximized(v => !v)}
+                onScreenShare={onScreenShare}
+                onStopScreenShare={onStopScreenShare}
+              />
+            </div>
+          </div>
+          {!videoControlsOpen && (
+            <button
+              onClick={() => setVideoControlsOpen(true)}
+              className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 p-3 bg-gray-900 hover:bg-gray-800 rounded-full border border-gray-700 shadow-lg transition-all duration-300 hover:scale-110 active:scale-95"
+              title="Show video controls"
+              aria-label="Show video controls"
+            >
+              <Video className="w-5 h-5 text-gray-300" />
+            </button>
+          )}
+        </>
       )}
 
-      {/* Floating Problem Search Dropdown (for interviewer, accessible anytime) */}
-      {showProblemSearch && userRole === 'interviewer' && (
+      {/* Floating Problem Search Dropdown (accessible to all participants) */}
+      {showProblemSearch && (
         <div className="fixed top-20 right-4 z-50 w-80 shadow-2xl rounded-xl border border-gray-800 bg-gray-950 overflow-hidden">
           <div className="flex items-center gap-1 p-2 border-b border-gray-800 bg-gray-900">
             <div className="flex-1 relative">
@@ -308,16 +363,14 @@ export default function RoomLayout({
             {userRole === 'interviewer' ? '👔 Interviewer' : '👨‍💼 Interviewee'}
           </span>
            <div className="flex-1 min-w-0" />
-          {userRole === 'interviewer' && (
-            <button
-              onClick={() => setShowProblemSearch(true)}
-              className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium flex items-center gap-1.5 transition-colors"
-              title="Search & select problem"
-            >
-              <Search className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Problem</span>
-            </button>
-          )}
+           <button
+             onClick={() => setShowProblemSearch(true)}
+             className="px-3 py-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-medium flex items-center gap-1.5 transition-colors"
+             title="Search & select problem"
+           >
+             <Search className="w-3.5 h-3.5" />
+             <span className="hidden sm:inline">Problem</span>
+           </button>
           <InterviewTimer
             isInterviewer={userRole === 'interviewer'}
             onTimerEnd={onEndCall}
@@ -343,11 +396,13 @@ export default function RoomLayout({
             onLanguageChange={handleLanguageChange}
             code={code}
             onRun={() => {
+              if (isRunning) return
+              setIsRunning(true)
               setActiveBottomTab('tests')
               setBottomPanelOpen(true)
               setRunNonce(value => value + 1)
             }}
-            isRunning={false}
+            isRunning={isRunning}
           />
           <div className="flex-1 min-h-0">
             <CodeEditor
@@ -392,6 +447,8 @@ export default function RoomLayout({
                     problemId={problem?._id}
                     onRunComplete={handleRunComplete}
                     externalResults={externalResults}
+                    isRunning={isRunning}
+                    onRunningChange={setIsRunning}
                   />
                 ) : (
                   <ExecutionOutput

@@ -10,76 +10,27 @@ const { agenda } = require('../config/agenda');
 // Store active rooms in memory for quick access
 const activeRooms = new Map();
 
+// Cleanup function to remove stale rooms (older than 2 hours)
+function cleanupStaleRooms() {
+  const twoHoursAgo = Date.now() - 2 * 60 * 60 * 1000;
+  for (const [roomId, room] of activeRooms.entries()) {
+    if (room.createdAt && room.createdAt < twoHoursAgo) {
+      activeRooms.delete(roomId);
+      logger.info(`Cleaned up stale room: ${roomId}`);
+    }
+  }
+}
+
+// Run cleanup every 30 minutes
+setInterval(cleanupStaleRooms, 30 * 60 * 1000);
+
 module.exports = function(io) {
   // Room event handlers
-  
-  // join_room / join-room: User joins an interview room
+
+  // Note: join-room handler is consolidated in webrtcSignaling.js
+  // This file focuses on matching queue and session management
+
   io.on('connection', (socket) => {
-    const handleJoinRoom = async (data) => {
-      const { roomId, role } = data;
-      
-      if (!roomId) {
-        logger.warn(`join_room: missing roomId for user ${socket.data.username}`);
-        return socket.emit('error', { message: 'roomId required' });
-      }
-
-      try {
-        socket.join(roomId);
-        
-        if (!activeRooms.has(roomId)) {
-          activeRooms.set(roomId, {
-            roomId,
-            participants: [],
-            currentProblem: null,
-            currentCode: '',
-            language: 'javascript',
-            messages: []
-          });
-        }
-
-        const room = activeRooms.get(roomId);
-        const participant = {
-          userId: socket.data.userId,
-          username: socket.data.username,
-          socketId: socket.id,
-          role: role || 'interviewee',
-          connected: true
-        };
-
-        // Remove duplicate if exists
-        room.participants = room.participants.filter(p => p.userId !== socket.data.userId);
-        room.participants.push(participant);
-
-        logger.info(`User ${socket.data.username} joined room ${roomId} as ${participant.role}`);
-
-        // Notify everyone in room
-        io.to(roomId).emit('participant_joined', {
-          participant,
-          participants: room.participants
-        });
-        io.to(roomId).emit('participant-joined', {
-          participant,
-          participants: room.participants
-        });
-
-        // Send joining user the current state
-        socket.emit('room_state', {
-          roomId,
-          participants: room.participants,
-          currentProblem: room.currentProblem,
-          currentCode: room.currentCode,
-          language: room.language,
-          messages: room.messages.slice(-50) // Last 50 messages
-        });
-
-      } catch (err) {
-        logger.error('join_room error:', err);
-        socket.emit('error', { message: 'Failed to join room' });
-      }
-    };
-    socket.on('join_room', handleJoinRoom);
-    socket.on('join-room', handleJoinRoom);
-
     // leave_room: User leaves the room
     socket.on('leave_room', (data) => {
       const { roomId } = data;
@@ -156,7 +107,6 @@ module.exports = function(io) {
       }
     };
     socket.on('set_problem', handleSetProblem);
-    socket.on('problem-selected', handleSetProblem);
 
     // code_change: User edits code (broadcast with debounce)
     socket.on('code_change', (data) => {
@@ -348,32 +298,6 @@ module.exports = function(io) {
           duration: data.duration || 0
         });
 
-        // Calculate and apply ELO for each participant
-        for (const participant of room.participants) {
-          try {
-            const user = await User.findById(participant.userId);
-            if (user) {
-              const delta = calculateEloDelta({
-                difficulty: room.currentProblem.difficulty,
-                solved: testResults?.allPassed || false,
-                duration: data.duration,
-                timeLimit: 3600, // 1 hour default
-                testsPassed: testResults?.passedCount || 0,
-                totalTests: testResults?.totalCount || 0,
-                codeLength: finalCode?.length || 0
-              });
-
-              const newElo = updateEloRating(user.elo, delta);
-              user.elo = newElo;
-              await user.save();
-
-              session.eloData.push({ userId: user._id, eloAtEnd: newElo, delta });
-            }
-          } catch (err) {
-            logger.error(`Failed to update ELO for user ${participant.userId}:`, err);
-          }
-        }
-
         await session.save();
 
         // Notify room that session ended
@@ -388,9 +312,13 @@ module.exports = function(io) {
 
         // Queue debrief generation job
         try {
+          // Filter to only include interviewer and interviewee (not observers)
+          const matchedPair = room.participants.filter(p =>
+            p.role === 'interviewer' || p.role === 'interviewee'
+          ).map(p => p.userId);
           await agenda.now('ai-debrief', {
             roomId,
-            participantIds: room.participants.map(p => p.userId)
+            participantIds: matchedPair
           });
           logger.info(`Queued AI debrief for session ${session._id}`);
         } catch (jobErr) {
@@ -398,6 +326,10 @@ module.exports = function(io) {
         }
 
         logger.info(`Session ended: ${roomId}`);
+
+        // Remove room from activeRooms to prevent memory leak
+        activeRooms.delete(roomId);
+        logger.info(`Removed room ${roomId} from activeRooms`);
       } catch (err) {
         logger.error('end_session error:', err);
         socket.emit('error', { message: 'Failed to end session' });
@@ -415,5 +347,10 @@ module.exports = function(io) {
     });
   });
 
-  return io;
+  // Expose activeRooms for rejoin logic
+  function getActiveRooms() {
+    return activeRooms;
+  }
+
+  return { io, getActiveRooms };
 };

@@ -80,6 +80,23 @@ const ProblemSchema = new mongoose.Schema(
       cpp: String,
       go: String,
     },
+    codeTemplates: {
+      javascript: String,
+      typescript: String,
+      python: String,
+      java: String,
+      cpp: String,
+      go: String,
+    },
+    testHarness: {
+      javascript: String,
+      typescript: String,
+      python: String,
+      java: String,
+      cpp: String,
+      go: String,
+    },
+    hints: [String],
   },
   { timestamps: true }
 );

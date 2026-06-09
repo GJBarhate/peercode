@@ -3,26 +3,72 @@
 const { v4: uuidv4 } = require('uuid');
 const Room = require('../models/Room');
 const User = require('../models/User');
+const MatchingQueue = require('../models/MatchingQueue');
 const logger = require('../utils/logger');
 
-module.exports = function (io) {
+module.exports = async function (io) {
   const queue = new Map();
   const userSockets = new Map(); // Track user socket IDs for duplicate prevention
+  const timeoutTimers = new Map(); // Server-side 60s timeout per user
+  const QUEUE_TIMEOUT_MS = 60000;
+  let queueSequence = 0; // Incrementing counter for O(1) position calculation
+
+  function removeFromQueue(userId) {
+    if (!userId) return;
+    queue.delete(userId);
+    userSockets.delete(userId);
+    clearQueueTimer(userId);
+  }
+
+  function clearQueueTimer(userId) {
+    if (timeoutTimers.has(userId)) {
+      clearTimeout(timeoutTimers.get(userId));
+      timeoutTimers.delete(userId);
+    }
+  }
+
+  function setQueueTimer(userId, socket, io) {
+    clearQueueTimer(userId);
+    const timer = setTimeout(async () => {
+      if (queue.has(userId)) {
+        const entry = queue.get(userId);
+        logger.info(`⏰ Queue timeout for ${entry?.username || userId}`);
+        removeFromQueue(userId);
+        try {
+          await MatchingQueue.deleteOne({ userId });
+        } catch (err) {
+          logger.error('Error removing timed-out user from MongoDB:', err.message);
+        }
+        io.to(userSockets.get(userId) || '').emit('queue-timeout', { message: 'Match not found within 60 seconds' });
+      }
+    }, QUEUE_TIMEOUT_MS);
+    timeoutTimers.set(userId, timer);
+  }
+
+  // Restore queue from MongoDB on startup (without timers — stale entries will be cleaned)
+  try {
+    const queuedUsers = await MatchingQueue.find({});
+    logger.info(`Restoring ${queuedUsers.length} users from matching queue — will be pruned on next interaction`);
+    // Remove stale entries restored from DB (they have no active socket)
+    await MatchingQueue.deleteMany({});
+  } catch (err) {
+    logger.error('Error restoring queue from MongoDB:', err.message);
+  }
 
   function findMatch(candidate) {
     let bestMatch = null;
     let bestScore = -1;
 
     for (const [userId, entry] of queue.entries()) {
-      // Prevent duplicates
+      // Prevent self-match
       if (userId === candidate.userId) continue;
 
-      // Role compatibility: interviewer ↔ interviewee, or anyone accepts observer
+      // Role compatibility: 'any' (Either) matches anyone; otherwise strict interviewer↔interviewee
       const roleCompatible =
+        candidate.preferredRole === 'any' ||
+        entry.preferredRole === 'any' ||
         (candidate.preferredRole === 'interviewer' && entry.preferredRole === 'interviewee') ||
-        (candidate.preferredRole === 'interviewee' && entry.preferredRole === 'interviewer') ||
-        candidate.preferredRole === 'observer' ||
-        entry.preferredRole === 'observer';
+        (candidate.preferredRole === 'interviewee' && entry.preferredRole === 'interviewer');
 
       if (!roleCompatible) continue;
 
@@ -30,11 +76,13 @@ module.exports = function (io) {
       const eloMatch = Math.abs(candidate.elo - entry.elo) <= 200;
       if (!eloMatch) continue;
 
-      // Topic matching
+      // Topic matching (case-insensitive)
+      const candidateTopic = (candidate.preferredTopic || 'any').toLowerCase();
+      const entryTopic = (entry.preferredTopic || 'any').toLowerCase();
       const topicCompatible =
-        candidate.preferredTopic === 'any' ||
-        entry.preferredTopic === 'any' ||
-        candidate.preferredTopic === entry.preferredTopic;
+        candidateTopic === 'any' ||
+        entryTopic === 'any' ||
+        candidateTopic === entryTopic;
 
       if (!topicCompatible) continue;
 
@@ -59,7 +107,7 @@ module.exports = function (io) {
         if (userSockets.has(socket.data.userId)) {
           const oldSocketId = userSockets.get(socket.data.userId);
           io.to(oldSocketId).emit('queue-error', { message: 'Joined queue from another device' });
-          queue.delete(socket.data.userId);
+          removeFromQueue(socket.data.userId);
         }
 
         userSockets.set(socket.data.userId, socket.id);
@@ -72,18 +120,47 @@ module.exports = function (io) {
           preferredTopic: topic || 'any',
           socketId: socket.id,
           joinedAt: new Date(),
+          sequence: ++queueSequence,
         };
 
         queue.set(socket.data.userId, candidate);
+
+        // Start server-side 60s timeout
+        setQueueTimer(socket.data.userId, socket, io);
+
+        // Persist to MongoDB
+        try {
+          await MatchingQueue.findOneAndUpdate(
+            { userId: socket.data.userId },
+            {
+              userId: socket.data.userId,
+              username: candidate.username,
+              elo: candidate.elo,
+              preferredRole: candidate.preferredRole,
+              preferredTopic: candidate.preferredTopic,
+              socketId: socket.id,
+              joinedAt: candidate.joinedAt,
+            },
+            { upsert: true, new: true }
+          );
+        } catch (err) {
+          logger.error('Error persisting queue to MongoDB:', err.message);
+        }
+        
         logger.info(`👤 User ${candidate.username} joined queue - Role: ${candidate.preferredRole}, Topic: ${candidate.preferredTopic}, Queue size: ${queue.size}`);
 
         const match = findMatch(candidate);
 
         if (match) {
-          queue.delete(candidate.userId);
-          queue.delete(match.userId);
-          userSockets.delete(candidate.userId);
-          userSockets.delete(match.userId);
+          removeFromQueue(candidate.userId);
+          removeFromQueue(match.userId);
+
+          // Remove from MongoDB when matched
+          try {
+            await MatchingQueue.deleteMany({ userId: { $in: [candidate.userId, match.userId] } });
+          } catch (err) {
+            logger.error('Error removing matched users from MongoDB:', err.message);
+          }
 
           const roomId = uuidv4();
 
@@ -153,8 +230,12 @@ module.exports = function (io) {
             io.to(match.socketId).emit('queue-error', { message: 'Failed to create room. Please try again.' });
           }
         } else {
-          // Still in queue - send position update
-          const position = Array.from(queue.keys()).indexOf(candidate.userId) + 1;
+          // Still in queue - send position update (O(1) using sequence counter)
+          let minSequence = queueSequence;
+          for (const entry of queue.values()) {
+            if (entry.sequence < minSequence) minSequence = entry.sequence;
+          }
+          const position = candidate.sequence - minSequence + 1;
           const waitTimeSeconds = Math.ceil(queue.size * 90 / 60); // Rough estimate
 
           socket.emit('queue-waiting', {
@@ -171,11 +252,18 @@ module.exports = function (io) {
       }
     });
 
-    socket.on('queue-leave', () => {
+    socket.on('queue-leave', async () => {
       try {
         if (socket.data.userId) {
-          queue.delete(socket.data.userId);
-          userSockets.delete(socket.data.userId);
+          removeFromQueue(socket.data.userId);
+          
+          // Remove from MongoDB
+          try {
+            await MatchingQueue.deleteOne({ userId: socket.data.userId });
+          } catch (err) {
+            logger.error('Error removing from MongoDB queue:', err.message);
+          }
+          
           socket.emit('queue-left');
           logger.info(`👋 ${socket.data.username || 'unknown'} left queue`);
         }
@@ -184,11 +272,18 @@ module.exports = function (io) {
       }
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
       try {
         if (socket.data.userId) {
-          queue.delete(socket.data.userId);
-          userSockets.delete(socket.data.userId);
+          removeFromQueue(socket.data.userId);
+          
+          // Remove from MongoDB
+          try {
+            await MatchingQueue.deleteOne({ userId: socket.data.userId });
+          } catch (err) {
+            logger.error('Error removing from MongoDB queue on disconnect:', err.message);
+          }
+          
           logger.info(`🔌 ${socket.data.username || 'unknown'} disconnected from queue`);
         }
       } catch (err) {

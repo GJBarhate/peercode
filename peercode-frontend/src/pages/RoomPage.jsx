@@ -30,6 +30,7 @@ export default function RoomPage() {
   const editorRef = useRef(null)
   const stuckShownRef = useRef(false)
   const hasJoinedRef = useRef(false)
+  const mountedRef = useRef(true)
 
   useEffect(() => {
     if (roomId !== 'new') {
@@ -135,6 +136,11 @@ export default function RoomPage() {
     }
   }, [roomId, navigate])
 
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
   const {
     room,
     participants,
@@ -168,7 +174,7 @@ export default function RoomPage() {
   }, [])
 
   const { language, setLanguage, bindToMonaco } = useYjsEditor(resolvedRoomId, socket, editorRef, onStuckDetected)
-  const { remoteStreams } = useWebRTC(resolvedRoomId, socket, localStream)
+  const { remoteStreams, peerMediaStates, isScreenSharing, startScreenShare, stopScreenShare, syncLocalStream } = useWebRTC(resolvedRoomId, socket, localStream)
 
   const handleJoin = async ({ role, isMuted, isVideoOff }) => {
     if (!resolvedRoomId) return
@@ -188,21 +194,47 @@ export default function RoomPage() {
     try {
       let stream = null
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: !isVideoOff,
-          audio: !isMuted
-        })
+        // Always request both tracks so they can be toggled later
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
 
+        if (!mountedRef.current) {
+          stream.getTracks().forEach(track => track.stop())
+          return
+        }
+
+        // Apply initial mute states using track.enabled
         stream.getAudioTracks().forEach(track => {
           track.enabled = !isMuted
         })
         stream.getVideoTracks().forEach(track => {
           track.enabled = !isVideoOff
         })
-      } catch (_) {
-        stream = null
+      } catch (err) {
+        // Try video only if both failed
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true })
+          stream.getVideoTracks().forEach(track => {
+            track.enabled = !isVideoOff
+          })
+        } catch (err2) {
+          // Try audio only
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+            stream.getAudioTracks().forEach(track => {
+              track.enabled = !isMuted
+            })
+          } catch (err3) {
+            stream = null
+          }
+        }
       }
 
+      if (!mountedRef.current) {
+        if (stream) stream.getTracks().forEach(track => track.stop())
+        return
+      }
+
+      syncLocalStream(stream)
       setLocalStream(stream)
       setUserRole(role)
       const { data } = await joinRoom(resolvedRoomId, { role })
@@ -262,6 +294,10 @@ export default function RoomPage() {
           socket={socket}
           localStream={localStream}
           remoteStreams={remoteStreams}
+          peerMediaStates={peerMediaStates}
+          isScreenSharing={isScreenSharing}
+          onScreenShare={startScreenShare}
+          onStopScreenShare={stopScreenShare}
           language={language}
           setLanguage={setLanguage}
           editorRef={editorRef}
