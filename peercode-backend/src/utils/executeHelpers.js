@@ -143,6 +143,7 @@ class JsonParser {
 function generateJavaWrapper(fnName) {
   return `
 import java.util.*;
+import java.io.*;
 import java.lang.reflect.*;
 ${JAVA_JSON_PARSER}
 
@@ -242,7 +243,7 @@ public class Main {
     if (obj == null) return "null";
     if (obj instanceof String) return "\\"" + escapeJson((String)obj) + "\\"";
     if (obj instanceof Boolean || obj instanceof Number) return obj.toString();
-    if (obj instanceof int[]) { StringBuilder sb = new StringBuilder("["); for (int v : (int[])sb.append(sb.length()>1?",":"").append(v)); return sb.append("]").toString(); }
+    if (obj instanceof int[]) { int[] ia = (int[])obj; StringBuilder sb = new StringBuilder("["); for (int i = 0; i < ia.length; i++) { if (i > 0) sb.append(","); sb.append(ia[i]); } return sb.append("]").toString(); }
     if (obj instanceof char[][]) {
       StringBuilder sb = new StringBuilder("[");
       for (char[] row : (char[][])obj) {
