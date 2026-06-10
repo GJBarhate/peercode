@@ -19,28 +19,30 @@ function getLanguageId(lang) {
 function extractFunctionName(starterCode, language) {
   if (!starterCode) return null;
   const code = starterCode[language] || starterCode.javascript || '';
-  if (language === 'javascript' || language === 'typescript') {
-    const patterns = [
-      /function\s+(\w+)\s*\(/,
-      /(?:var|const|let)\s+(\w+)\s*=\s*function\s*\(/,
-      /(?:var|const|let)\s+(\w+)\s*=\s*\([^)]*\)\s*=>/,
-      /(?:var|const|let)\s+(\w+)\s*=\s*async\s*\(/,
-    ];
-    for (const p of patterns) { const m = code.match(p); if (m) return m[1]; }
-  }
-  if (language === 'python' || language === 'py' || language === 'python3') {
-    const classMatch = code.match(/class\s+Solution\s*:/);
-    if (classMatch) { const m = code.match(/def\s+(\w+)\s*\(/); if (m) return m[1]; }
-    const m = code.match(/def\s+(\w+)\s*\(/); if (m) return m[1];
-  }
-  if (language === 'java') {
-    const m = code.match(/public\s+(?:static\s+)?\w+\s+(\w+)\s*\(/); if (m) return m[1];
-  }
-  if (language === 'cpp' || language === 'c++') {
-    const m = code.match(/(\w+)\s*\([^)]*\)\s*(?:const\s*)?\{/); if (m) return m[1];
-  }
-  if (language === 'c') {
-    const m = code.match(/(\w+)\s*\([^)]*\)\s*\{/); if (m) return m[1];
+  if (!code) return null;
+  const patterns = {
+    javascript: [/function\s+(\w+)\s*\(/, /(?:var|const|let)\s+(\w+)\s*=\s*(?:function\s*\(|\([^)]*\)\s*=>|async\s*\()/],
+    typescript: [/function\s+(\w+)\s*\(/, /(?:var|const|let)\s+(\w+)\s*=\s*(?:function\s*\(|\([^)]*\)\s*=>|async\s*\()/],
+    python: [/def\s+(\w+)\s*\(/, /class\s+Solution\s*:/],
+    py: [/def\s+(\w+)\s*\(/, /class\s+Solution\s*:/],
+    python3: [/def\s+(\w+)\s*\(/, /class\s+Solution\s*:/],
+    java: [/public\s+(?:static\s+)?\w+\s+(\w+)\s*\(/],
+    cpp: [/(\w+)\s*\([^)]*\)\s*(?:const\s*)?\{/],
+    'c++': [/(\w+)\s*\([^)]*\)\s*(?:const\s*)?\{/],
+    c: [/(\w+)\s*\([^)]*\)\s*\{/],
+    go: [/func\s+(\w+)\s*\(/],
+  };
+  const langPatterns = patterns[language] || patterns.javascript;
+  for (const p of langPatterns) {
+    const m = code.match(p);
+    if (m) return m[1];
+    // For Python, if we found 'class Solution', look for method
+    if (language === 'python' || language === 'py' || language === 'python3') {
+      if (m && m[0].includes('class Solution')) {
+        const methodMatch = code.match(/def\s+(\w+)\s*\(self/);
+        if (methodMatch) return methodMatch[1];
+      }
+    }
   }
   return null;
 }
@@ -55,11 +57,11 @@ ${code}
 
 const fs = require('fs');
 const input = fs.readFileSync(0, 'utf-8').trim();
-
 try {
   let args;
   try { args = input ? JSON.parse(input) : []; }
-  catch { args = input ? input.split('\\n').map(l=>l.trim()).filter(l=>l).map(l=>{try{return JSON.parse(l);}catch{return isNaN(l)?l:Number(l);}}) : []; }
+  catch { args = input.split('\\n').map(l=>l.trim()).filter(l=>l).map(l=>{try{return JSON.parse(l);}catch{return isNaN(l)?l:Number(l);}}); }
+  if (!Array.isArray(args)) args = [args];
   const result = ${fnName}(...args);
   console.log(JSON.stringify(result));
 } catch (e) { console.error(e.message); process.exit(1); }
@@ -73,16 +75,21 @@ import json, sys
 
 try:
     input_data = sys.stdin.read().strip()
-    if '\\n' in input_data:
-        lines = [line.strip() for line in input_data.split('\\n') if line.strip()]
-        args = []
-        for line in lines:
-            try: args.append(json.loads(line))
-            except: args.append(line)
+    if input_data:
+        try: args = json.loads(input_data)
+        except:
+            if '\\n' in input_data:
+                args = []
+                for line in input_data.split('\\n'):
+                    line = line.strip()
+                    if line:
+                        try: args.append(json.loads(line))
+                        except: args.append(line)
+            else:
+                args = [input_data]
+        if not isinstance(args, list): args = [args]
     else:
-        try: args = [json.loads(input_data)]
-        except: args = [input_data] if input_data else []
-    
+        args = []
     ${hasSolutionClass ? `sol = Solution(); result = getattr(sol, '${fnName}')(*args)` : `result = ${fnName}(*args)`}
     print(json.dumps(result))
 except Exception as e:
@@ -92,18 +99,39 @@ except Exception as e:
   }
   if (langId === 62) {
     return `
-import java.util.*; import java.io.*;
-
-${code}
+import java.util.*;
+import java.io.*;
 
 public class Main {
   public static void main(String[] args) {
     try {
-      StringBuilder input = new StringBuilder();
+      StringBuilder sb = new StringBuilder();
       BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-      String line; while ((line = reader.readLine()) != null) { input.append(line).append("\\n"); }
-      Solution sol = new Solution();
-      System.out.println("Java test harness needs problem-specific implementation");
+      String line;
+      while ((line = reader.readLine()) != null) sb.append(line);
+      String input = sb.toString().trim();
+      Object result;
+      if (input.isEmpty()) {
+        result = new ${hasSolutionClass ? 'Solution().' + fnName + '()' : fnName + '()'};
+      } else {
+        try {
+          org.json.JSONArray jsonArgs = new org.json.JSONArray(input);
+          Object[] callArgs = new Object[jsonArgs.length()];
+          for (int i = 0; i < jsonArgs.length(); i++) {
+            Object val = jsonArgs.get(i);
+            if (val instanceof org.json.JSONArray) {
+              java.util.List<Object> list = new ArrayList<>();
+              for (int j = 0; j < ((org.json.JSONArray)val).length(); j++) list.add(((org.json.JSONArray)val).get(j));
+              callArgs[i] = list;
+            } else { callArgs[i] = val; }
+          }
+          result = ${hasSolutionClass ? 'new Solution().' + fnName : fnName}(callArgs);
+        } catch (Exception e) {
+          String[] parts = input.split("\\n");
+          result = ${hasSolutionClass ? 'new Solution().' + fnName : fnName}((Object)parts);
+        }
+      }
+      if (result != null) System.out.println(result.toString());
     } catch (Exception e) { System.err.println(e.getMessage()); System.exit(1); }
   }
 }
@@ -116,16 +144,38 @@ using namespace std;
 
 ${code}
 
-int main() { return 0; }
+int main() {
+  ios::sync_with_stdio(false); cin.tie(nullptr);
+  string input, line;
+  while (getline(cin, line)) input += line;
+  if (input.empty()) { ${fnName}(); return 0; }
+  try {
+    auto result = ${fnName}(input);
+    cout << result << endl;
+  } catch (...) { cerr << "Error executing " << "${fnName}" << endl; return 1; }
+  return 0;
+}
 `;
   }
   if (langId === 50) {
     return `
-#include <stdio.h> #include <stdlib.h> #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 ${code}
 
-int main() { return 0; }
+int main() {
+  char input[100000] = {0};
+  size_t total = 0;
+  char buffer[4096];
+  while (fgets(buffer, sizeof(buffer), stdin)) {
+    size_t len = strlen(buffer);
+    if (total + len < sizeof(input)) { memcpy(input + total, buffer, len); total += len; }
+  }
+  ${fnName}(input);
+  return 0;
+}
 `;
   }
   if (langId === 74) {
@@ -135,10 +185,36 @@ ${code}
 const fs = require('fs');
 const input = fs.readFileSync(0, 'utf-8').trim();
 try {
-  let args; try { args = input ? JSON.parse(input) : []; }
-  catch { args = input ? input.split('\\n').map(l=>l.trim()).filter(l=>l).map(l=>{try{return JSON.parse(l);}catch{return isNaN(l)?l:Number(l);}}) : []; }
-  const result = ${fnName}(...args); console.log(JSON.stringify(result));
+  let args;
+  try { args = input ? JSON.parse(input) : []; }
+  catch { args = input.split('\\n').map(l=>l.trim()).filter(l=>l).map(l=>{try{return JSON.parse(l);}catch{return isNaN(l)?l:Number(l);}}); }
+  if (!Array.isArray(args)) args = [args];
+  const result = ${fnName}(...args);
+  console.log(JSON.stringify(result));
 } catch (e) { console.error(e.message); process.exit(1); }
+`;
+  }
+  if (langId === 106) {
+    return `
+package main
+
+import (
+  "bufio"
+  "encoding/json"
+  "fmt"
+  "os"
+  "reflect"
+)
+
+${code}
+
+func main() {
+  scanner := bufio.NewScanner(os.Stdin)
+  var input string
+  for scanner.Scan() { input += scanner.Text() }
+  if input == "" { ${fnName}(); return }
+  ${fnName}(input)
+}
 `;
   }
   return code;
@@ -158,7 +234,6 @@ function buildCodeFromHarness(problem, language, userCode, testInput) {
     }
   }
 
-  // Escape test input for languages that embed in regular string literals (Java, C++)
   let escapedInput = testInput;
   if (language === 'java' || language === 'cpp') {
     escapedInput = escapedInput

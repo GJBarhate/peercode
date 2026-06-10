@@ -14,8 +14,14 @@ function normalizeOutput(output) {
   catch (_) { return trimmed.replace(/\s+/g, ' ').trim(); }
 }
 
-function arrayNormalize(s) {
-  return s.trim().replace(/\s/g, '').replace(/\[|\]/g, '').split(',').map(Number).sort((a,b)=>a-b).join(',');
+function normalizeArrayOutput(s) {
+  const trimmed = (s || '').trim();
+  try {
+    const parsed = JSON.parse(trimmed);
+    return JSON.stringify(parsed);
+  } catch (_) {
+    return trimmed.replace(/\s+/g, ' ').trim();
+  }
 }
 
 function outputsMatch(actual, expected) {
@@ -23,7 +29,14 @@ function outputsMatch(actual, expected) {
   const e = (expected || '').trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   if (a === e) return true;
   try { return normalizeOutput(a) === normalizeOutput(e); } catch (_) {}
-  try { return arrayNormalize(a) === arrayNormalize(e); } catch (_) {}
+  try { return normalizeArrayOutput(a) === normalizeArrayOutput(e); } catch (_) {}
+  try {
+    const pa = JSON.parse(a);
+    const pe = JSON.parse(e);
+    if (Array.isArray(pa) && Array.isArray(pe)) {
+      return JSON.stringify(pa) === JSON.stringify(pe);
+    }
+  } catch (_) {}
   return a.replace(/\s+/g, '') === e.replace(/\s+/g, '');
 }
 
@@ -105,7 +118,28 @@ async function executeCode(req, res) {
       }
     } catch (e) { logger.warn('Could not extract function name:', e.message); }
     const hasSolutionClass = code.includes('class Solution');
-    if (!functionName && problemSlug) functionName = problemSlug.split('-').map((p,i)=>i===0?p:p[0].toUpperCase()+p.slice(1)).join('');
+    if (!functionName && problemSlug) {
+      const KNOWN_FUNCTIONS = {
+        'valid-parentheses': 'isValid',
+        'best-time-to-buy-and-sell-stock': 'maxProfit',
+        'maximum-subarray': 'maxSubArray',
+        'number-of-islands': 'numIslands',
+        'merge-intervals': 'merge',
+        'coin-change': 'coinChange',
+        'word-break': 'wordBreak',
+        'binary-tree-level-order-traversal': 'levelOrder',
+        'lru-cache': 'LRUCache',
+        'house-robber': 'rob',
+        'longest-substring-without-repeating-characters': 'lengthOfLongestSubstring',
+        'container-with-most-water': 'maxArea',
+        '3sum': 'threeSum',
+        'two-sum': 'twoSum',
+        'serialize-and-deserialize-binary-tree': 'serialize',
+        'climbing-stairs': 'climbStairs',
+        'palindromic-substrings': 'countSubstrings',
+      };
+      functionName = KNOWN_FUNCTIONS[problemSlug] || problemSlug.split('-').map((p,i)=>i===0?p:p[0].toUpperCase()+p.slice(1)).join('');
+    }
     if (!functionName) functionName = 'solution';
 
     logger.info(`Executing ${hasHarness ? 'with harness' : 'with generic wrapper'} for ${language} (ID: ${languageId}), ${testCases.length} test cases`);
