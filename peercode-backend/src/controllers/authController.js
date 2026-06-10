@@ -17,10 +17,10 @@ const googleClient = new OAuth2Client(
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  sameSite: 'lax', // Changed from 'strict' to 'lax' for better compatibility
+  sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
   secure: process.env.NODE_ENV === 'production',
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-  path: '/', // Ensure cookie is available across all paths
+  path: '/',
 };
 
 function generateVerificationToken() {
