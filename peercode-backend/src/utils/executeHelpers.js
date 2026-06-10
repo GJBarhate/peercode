@@ -334,7 +334,10 @@ except Exception as e:
   }
 
   if (langId === 62) {
-    return generateJavaWrapper(fnName);
+    // Insert user's Solution class between imports and Main class
+    const wrapper = generateJavaWrapper(fnName);
+    const mainIdx = wrapper.indexOf('public class Main');
+    return wrapper.substring(0, mainIdx) + '\n' + code + '\n' + wrapper.substring(mainIdx);
   }
 
   if (langId === 54) {

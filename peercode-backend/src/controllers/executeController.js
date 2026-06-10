@@ -133,16 +133,63 @@ async function executeCode(req, res) {
         'longest-substring-without-repeating-characters': 'lengthOfLongestSubstring',
         'container-with-most-water': 'maxArea',
         '3sum': 'threeSum',
-        'two-sum': 'twoSum',
         'serialize-and-deserialize-binary-tree': 'serialize',
         'climbing-stairs': 'climbStairs',
         'palindromic-substrings': 'countSubstrings',
+        'course-schedule': 'canFinish',
+        'trapping-rain-water': 'trap',
+        'pacific-atlantic-water-flow': 'pacificAtlantic',
+        'decode-ways': 'numDecodings',
+        'rotate-image': 'rotate',
+        'word-ladder': 'ladderLength',
       };
       functionName = KNOWN_FUNCTIONS[problemSlug] || problemSlug.split('-').map((p,i)=>i===0?p:p[0].toUpperCase()+p.slice(1)).join('');
     }
+
+    // Parameter count per problem for correct test case input wrapping
+    const PARAM_COUNTS = {
+      'two-sum': 2, 'valid-parentheses': 1, 'best-time-to-buy-and-sell-stock': 1,
+      'maximum-subarray': 1, 'number-of-islands': 1, 'merge-intervals': 1,
+      'coin-change': 2, 'word-break': 2, 'binary-tree-level-order-traversal': 1,
+      'lru-cache': 0, 'house-robber': 1, 'longest-substring-without-repeating-characters': 1,
+      'container-with-most-water': 1, '3sum': 1, 'course-schedule': 2,
+      'trapping-rain-water': 1, 'pacific-atlantic-water-flow': 1, 'decode-ways': 1,
+      'rotate-image': 1, 'word-ladder': 3, 'climbing-stairs': 1, 'palindromic-substrings': 1,
+      'serialize-and-deserialize-binary-tree': 1,
+    };
+    const paramCount = PARAM_COUNTS[problemSlug] || 1;
     if (!functionName) functionName = 'solution';
 
     logger.info(`Executing ${hasHarness ? 'with harness' : 'with generic wrapper'} for ${language} (ID: ${languageId}), ${testCases.length} test cases`);
+
+    // Normalize test inputs: ensure JSON array of arguments format
+    for (const tc of testCases) {
+      let input = (tc.input || '').trim();
+      // Try to fix common format: raw value -> JSON array of arguments
+      try {
+        const parsed = JSON.parse(input);
+        if (Array.isArray(parsed) && paramCount === 1 && parsed.length > 0) {
+          // Check if this looks like a 2D array being treated as N arguments
+          // e.g., [["1","1"],["1","0"]] for numIslands(grid) where grid is 1 param
+          // If parsed[0] is an array, the outer array is the argument itself
+          // Wrap it: [[["1","1"],["1","0"]]] -> 1 argument = the grid
+          if (Array.isArray(parsed[0]) || parsed.length > 1) {
+            tc.input = JSON.stringify([parsed]);
+          }
+        }
+      } catch (_) {
+        // Not JSON — check if newline-separated and convert to JSON array
+        if (input.includes('\n') && paramCount > 1) {
+          const parts = input.split('\n').filter(p => p.trim());
+          if (parts.length === paramCount) {
+            try {
+              const jsonParts = parts.map(p => JSON.parse(p));
+              tc.input = JSON.stringify(jsonParts);
+            } catch (_2) {}
+          }
+        }
+      }
+    }
 
     const results = [];
     for (let i = 0; i < testCases.length; i++) {
