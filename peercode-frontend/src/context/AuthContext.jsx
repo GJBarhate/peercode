@@ -84,31 +84,64 @@ export function AuthProvider({ children }) {
 
     async function init() {
       try {
-        // Try to refresh using httpOnly cookie to get a new access token
-        try {
-          const response = await axios.post(
-            `${API_BASE_URL}/auth/refresh`,
-            {},
-            {
-              withCredentials: true,
-              timeout: 5000 // 5 second timeout to prevent hanging
+        // Check if we have a stored access token from sessionStorage
+        const storedToken = (() => { try { return sessionStorage.getItem('peercode_access_token'); } catch(_) { return null; } })();
+        
+        if (storedToken) {
+          // Token exists — set it and try a lightweight verify instead of full refresh
+          setAccessToken(storedToken)
+          
+          // Try to use the stored token immediately, refresh in background
+          try {
+            const response = await axios.post(
+              `${API_BASE_URL}/auth/refresh`,
+              {},
+              {
+                withCredentials: true,
+                timeout: 3000
+              }
+            )
+            if (mounted) {
+              setAccessToken(response.data.accessToken)
+              setUser(response.data.user)
             }
-          )
-          if (mounted) {
-            setAccessToken(response.data.accessToken)
-            setUser(response.data.user)
+          } catch (_) {
+            // Refresh failed — token might still be valid for a while
+            // User will get 401 on next API call and interceptor will refresh
+            if (mounted) {
+              // Don't clear user — token might still work
+              // Only clear if we got a 401
+              if (_.response?.status === 401) {
+                setUser(null)
+                setAccessToken(null)
+              }
+            }
           }
-        } catch (refreshErr) {
-          logger.warn('Token refresh failed during init:', refreshErr.message)
-          // If refresh fails, user is not authenticated
-          if (mounted) {
-            setUser(null)
+        } else {
+          // No stored token — try to refresh using cookie
+          try {
+            const response = await axios.post(
+              `${API_BASE_URL}/auth/refresh`,
+              {},
+              {
+                withCredentials: true,
+                timeout: 5000
+              }
+            )
+            if (mounted) {
+              setAccessToken(response.data.accessToken)
+              setUser(response.data.user)
+            }
+          } catch (refreshErr) {
+            logger.warn('Token refresh failed during init:', refreshErr.message)
+            if (mounted) {
+              setUser(null)
+            }
           }
         }
       } catch (err) {
         logger.error('Auth init error:', err)
       } finally {
-        // CRITICAL: Only set loading to false after refresh attempt completes
         if (mounted) {
           setIsLoading(false)
         }

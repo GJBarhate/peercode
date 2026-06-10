@@ -91,7 +91,7 @@ app.get('/api/health', (req, res) => {
 });
 
 // Routes
-app.use('/api/auth', authLimiter, authRouter);
+app.use('/api/auth', authRouter);
 app.use('/api/rooms', auth, apiLimiter, roomsRouter);
 app.use('/api/problems', apiLimiter, problemsRouter);
 app.use('/api/sessions', auth, dashboardLimiter, sessionsRouter);

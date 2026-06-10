@@ -12,8 +12,31 @@ if (!API_BASE_URL) {
   throw new Error('VITE_API_URL must be configured')
 }
 
+// Persist access token in sessionStorage across page refreshes
+function loadToken() {
+  try {
+    const stored = sessionStorage.getItem('peercode_access_token')
+    if (stored) {
+      accessTokenRef = stored
+    }
+  } catch (_) {}
+}
+
+function saveToken(token) {
+  try {
+    if (token) {
+      sessionStorage.setItem('peercode_access_token', token)
+    } else {
+      sessionStorage.removeItem('peercode_access_token')
+    }
+  } catch (_) {}
+}
+
+loadToken()
+
 export function setAccessToken(token) {
   accessTokenRef = token
+  saveToken(token)
 }
 
 export function getAccessToken() {
