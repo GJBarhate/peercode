@@ -57,16 +57,238 @@ function extractFunctionName(starterCode, language) {
   const ps = patterns[language] || patterns.javascript;
   for (const p of ps) {
     const m = code.match(p);
-    if (m) { if (m[1]) return m[1]; }
+    if (m && m[1]) return m[1];
   }
   return null;
+}
+
+// ── Minimal JSON parser for Java (embedded below) ──────
+const JAVA_JSON_PARSER = `
+import java.util.*;
+import java.lang.reflect.*;
+
+class JsonVal {
+  Object val; int type; // 0=null,1=bool,2=num,3=str,4=arr,5=map
+  JsonVal(Object v, int t) { val = v; type = t; }
+  boolean isArr() { return type == 4; }
+  List<JsonVal> asArr() { return (List<JsonVal>)val; }
+  String asStr() { return (String)val; }
+  double asNum() { return ((Number)val).doubleValue(); }
+  boolean asBool() { return (Boolean)val; }
+}
+
+class JsonParser {
+  String s; int i;
+  JsonParser(String src) { s = src.trim(); i = 0; }
+  JsonVal parse() { JsonVal v = parseVal(); return v; }
+  char peek() { while (i < s.length() && s.charAt(i) <= ' ') i++; return i < s.length() ? s.charAt(i) : 0; }
+  char next() { char c = peek(); if (c != 0) i++; return c; }
+  JsonVal parseVal() {
+    char c = peek();
+    if (c == 'n') { expect("null"); return new JsonVal(null, 0); }
+    if (c == 't') { expect("true"); return new JsonVal(true, 1); }
+    if (c == 'f') { expect("false"); return new JsonVal(false, 1); }
+    if (c == '"') return new JsonVal(parseStr(), 3);
+    if (c == '[') return parseArr();
+    if (c == '-' || (c >= '0' && c <= '9')) return parseNum();
+    if (c == '{') return parseMap();
+    throw new RuntimeException("Unexpected: " + c);
+  }
+  void expect(String lit) { for (char c : lit.toCharArray()) if (next() != c) throw new RuntimeException("Expected " + lit); }
+  String parseStr() {
+    next(); // skip "
+    StringBuilder sb = new StringBuilder();
+    while (i < s.length() && s.charAt(i) != '"') {
+      if (s.charAt(i) == '\\\\' && i + 1 < s.length()) { i++; sb.append(s.charAt(i) == 'n' ? '\\n' : s.charAt(i)); }
+      else sb.append(s.charAt(i));
+      i++;
+    }
+    if (i < s.length()) i++; // skip closing "
+    return sb.toString();
+  }
+  JsonVal parseNum() {
+    int start = i;
+    if (s.charAt(i) == '-') i++;
+    while (i < s.length() && s.charAt(i) >= '0' && s.charAt(i) <= '9') i++;
+    boolean isDouble = false;
+    if (i < s.length() && s.charAt(i) == '.') { isDouble = true; i++; while (i < s.length() && s.charAt(i) >= '0' && s.charAt(i) <= '9') i++; }
+    String num = s.substring(start, i);
+    return new JsonVal(isDouble ? Double.parseDouble(num) : Long.parseLong(num), 2);
+  }
+  JsonVal parseArr() {
+    next(); // skip [
+    List<JsonVal> arr = new ArrayList<>();
+    while (peek() != 0 && peek() != ']') {
+      if (!arr.isEmpty()) next(); // skip comma
+      arr.add(parseVal());
+    }
+    if (peek() == ']') next();
+    return new JsonVal(arr, 4);
+  }
+  JsonVal parseMap() {
+    next(); // skip {
+    Map<String, JsonVal> map = new LinkedHashMap<>();
+    while (peek() != 0 && peek() != '}') {
+      if (!map.isEmpty()) next();
+      String key = parseStr();
+      next(); // skip :
+      map.put(key, parseVal());
+    }
+    if (peek() == '}') next();
+    return new JsonVal(map, 5);
+  }
+}
+`;
+
+function generateJavaWrapper(fnName) {
+  return `
+import java.util.*;
+import java.lang.reflect.*;
+${JAVA_JSON_PARSER}
+
+public class Main {
+  public static void main(String[] args) throws Exception {
+    StringBuilder sb = new StringBuilder();
+    BufferedReader r = new BufferedReader(new InputStreamReader(System.in));
+    String l; while ((l = r.readLine()) != null) sb.append(l);
+    String input = sb.toString().trim();
+
+    // Parse input as JSON array of arguments
+    Object[] callArgs = new Object[0];
+    if (!input.isEmpty()) {
+      JsonVal parsed = new JsonParser(input).parse();
+      if (parsed.isArr()) {
+        List<JsonVal> argList = parsed.asArr();
+        callArgs = new Object[argList.size()];
+        for (int i = 0; i < argList.size(); i++) {
+          callArgs[i] = toJavaObject(argList.get(i));
+        }
+      } else {
+        callArgs = new Object[]{ toJavaObject(parsed) };
+      }
+    }
+
+    // Call Solution.${fnName} via reflection
+    Class<?> clazz = Class.forName("Solution");
+    Method method = findMethod(clazz, "${fnName}", callArgs.length);
+    Object result = method.invoke(clazz.getDeclaredConstructor().newInstance(), callArgs);
+    System.out.println(toJsonString(result));
+  }
+
+  static Method findMethod(Class<?> clazz, String name, int paramCount) {
+    for (Method m : clazz.getDeclaredMethods()) {
+      if (m.getName().equals(name) && m.getParameterCount() == paramCount) return m;
+    }
+    throw new RuntimeException("Method " + name + " with " + paramCount + " params not found in Solution class");
+  }
+
+  static Object toJavaObject(JsonVal jv) {
+    if (jv == null || jv.type == 0) return null;
+    if (jv.type == 1) return jv.asBool();
+    if (jv.type == 3) return jv.asStr();
+    if (jv.type == 2) {
+      double d = jv.asNum();
+      if (d == Math.floor(d) && !Double.isInfinite(d)) return (int)(long)d;
+      return d;
+    }
+    if (jv.type == 4) {
+      List<JsonVal> arr = jv.asArr();
+      if (arr.isEmpty()) return new int[0];
+      // Check if it's a 2D array
+      if (arr.get(0).isArr()) {
+        List<Object> rows = new ArrayList<>();
+        for (JsonVal row : arr) {
+          List<JsonVal> rowArr = row.asArr();
+          // Detect type from first element
+          if (!rowArr.isEmpty() && rowArr.get(0).type == 3) {
+            char[][] result = new char[arr.size()][];
+            for (int i2 = 0; i2 < arr.size(); i2++) {
+              List<JsonVal> ra = arr.get(i2).asArr();
+              result[i2] = new char[ra.size()];
+              for (int j2 = 0; j2 < ra.size(); j2++) result[i2][j2] = ra.get(j2).asStr().charAt(0);
+            }
+            return result;
+          } else {
+            int[][] result = new int[arr.size()][];
+            for (int i2 = 0; i2 < arr.size(); i2++) {
+              List<JsonVal> ra = arr.get(i2).asArr();
+              result[i2] = new int[ra.size()];
+              for (int j2 = 0; j2 < ra.size(); j2++) result[i2][j2] = (int)ra.get(j2).asNum();
+            }
+            return result;
+          }
+        }
+      }
+      // 1D array
+      if (!arr.isEmpty() && arr.get(0).type == 3) {
+        String[] result = new String[arr.size()];
+        for (int i2 = 0; i2 < arr.size(); i2++) result[i2] = arr.get(i2).asStr();
+        return result;
+      }
+      if (!arr.isEmpty() && arr.get(0).type == 1) {
+        boolean[] result = new boolean[arr.size()];
+        for (int i2 = 0; i2 < arr.size(); i2++) result[i2] = arr.get(i2).asBool();
+        return result;
+      }
+      int[] result = new int[arr.size()];
+      for (int i2 = 0; i2 < arr.size(); i2++) result[i2] = (int)arr.get(i2).asNum();
+      return result;
+    }
+    return null;
+  }
+
+  @SuppressWarnings("unchecked")
+  static String toJsonString(Object obj) {
+    if (obj == null) return "null";
+    if (obj instanceof String) return "\\"" + escapeJson((String)obj) + "\\"";
+    if (obj instanceof Boolean || obj instanceof Number) return obj.toString();
+    if (obj instanceof int[]) { StringBuilder sb = new StringBuilder("["); for (int v : (int[])sb.append(sb.length()>1?",":"").append(v)); return sb.append("]").toString(); }
+    if (obj instanceof char[][]) {
+      StringBuilder sb = new StringBuilder("[");
+      for (char[] row : (char[][])obj) {
+        sb.append(sb.length()>1?",":"["); sb.append("\\"");
+        sb.append(escapeJson(new String(row)));
+        sb.append("\\"]");
+      }
+      return sb.append("]").toString();
+    }
+    if (obj instanceof int[][]) {
+      StringBuilder sb = new StringBuilder("[");
+      for (int[] row : (int[][])obj) {
+        sb.append(sb.length()>1?",":"[");
+        for (int v : row) sb.append(sb.charAt(sb.length()-1)=='['?"":",").append(v);
+        sb.append("]");
+      }
+      return sb.append("]").toString();
+    }
+    if (obj instanceof List) {
+      List<Object> list = (List<Object>)obj;
+      StringBuilder sb = new StringBuilder("[");
+      for (int i2 = 0; i2 < list.size(); i2++) {
+        if (i2 > 0) sb.append(",");
+        sb.append(toJsonString(list.get(i2)));
+      }
+      return sb.append("]").toString();
+    }
+    if (obj instanceof String[]) {
+      StringBuilder sb = new StringBuilder("[");
+      for (String s2 : (String[])obj) sb.append(sb.length()>1?",":"\\"").append(escapeJson(s2)).append("\\"");
+      return sb.append("]").toString();
+    }
+    return String.valueOf(obj);
+  }
+
+  static String escapeJson(String s) {
+    return s.replace("\\\\", "\\\\\\\\").replace("\\"", "\\\\\\"");
+  }
+}
+`;
 }
 
 function wrapCodeForTest(code, language, functionName, hasSolutionClass) {
   const langId = getLanguageId(language);
   const fnName = functionName || 'solution';
 
-  // ── JavaScript / TypeScript ────────────────────────────
   if (langId === 93 || langId === 74) {
     return `
 ${code}
@@ -84,7 +306,6 @@ try {
 `;
   }
 
-  // ── Python ─────────────────────────────────────────────
   if (langId === 71) {
     return `
 ${code}
@@ -111,34 +332,59 @@ except Exception as e:
 `;
   }
 
-  // ── Java ───────────────────────────────────────────────
   if (langId === 62) {
-    return `
-import java.util.*;
-import java.io.*;
-
-public class Main {
-  public static String solve(String input) throws Exception {
-    StringBuilder sb = new StringBuilder();
-    BufferedReader r = new BufferedReader(new InputStreamReader(System.in));
-    String l; while ((l = r.readLine()) != null) sb.append(l);
-    String data = sb.toString().trim();
-    ${hasSolutionClass ? `return String.valueOf(new Solution().${fnName}(data));` : `return String.valueOf(${fnName}(data));`}
+    return generateJavaWrapper(fnName);
   }
 
-  public static void main(String[] args) {
-    try { System.out.println(solve("")); }
-    catch (Exception e) { System.err.println(e.getMessage()); System.exit(1); }
-  }
-}
-`;
-  }
-
-  // ── C++ ────────────────────────────────────────────────
   if (langId === 54) {
     return `
 #include <bits/stdc++.h>
 using namespace std;
+
+// C++ JSON Parser
+struct Json { int type; // 0=null 1=bool 2=num 3=str 4=arr
+  bool b; long long n; double d; string s; vector<Json> arr;
+  Json():type(0),b(0),n(0),d(0){}
+  static Json parse(const string& src) { int i=0; return parseVal(src,i); }
+  static void skipWS(const string& s, int& i) { while(i<(int)s.size()&&s[i]<=' ') i++; }
+  static Json parseVal(const string& s, int& i) {
+    skipWS(s,i); if(i>=(int)s.size()) return Json();
+    char c=s[i];
+    if(c=='n'){ i+=4; return Json(); }
+    if(c=='t'){ i+=4; Json j; j.type=1; j.b=true; return j; }
+    if(c=='f'){ i+=5; Json j; j.type=1; j.b=false; return j; }
+    if(c=='"') return parseStr(s,i);
+    if(c=='[') return parseArr(s,i);
+    if(c=='-'||(c>='0'&&c<='9')) return parseNum(s,i);
+    return Json();
+  }
+  static Json parseStr(const string& s, int& i) {
+    i++; Json j; j.type=3;
+    while(i<(int)s.size()&&s[i]!='"'){ if(s[i]=='\\\\'&&i+1<(int)s.size()){i++;j.s+=s[i]=='n'?'\\n':s[i];}else j.s+=s[i]; i++; }
+    i++; return j;
+  }
+  static Json parseNum(const string& s, int& i) {
+    Json j; j.type=2; int start=i;
+    if(s[i]=='-') i++;
+    while(i<(int)s.size()&&s[i]>='0'&&s[i]<='9') i++;
+    if(i<(int)s.size()&&s[i]=='.'){ i++; while(i<(int)s.size()&&s[i]>='0'&&s[i]<='9') i++; j.d=stod(s.substr(start,i-start)); }
+    else j.n=stoll(s.substr(start,i-start));
+    return j;
+  }
+  static Json parseArr(const string& s, int& i) {
+    i++; Json j; j.type=4;
+    while(i<(int)s.size()&&s[i]!=']'){ if(!j.arr.empty()) i++; j.arr.push_back(parseVal(s,i)); skipWS(s,i); }
+    if(i<(int)s.size()&&s[i]==']') i++;
+    return j;
+  }
+  int asInt() const { return (int)(type==2?n:0); }
+  long long asLong() const { return type==2?n:0; }
+  string asStr() const { return type==3?s:""; }
+  vector<int> asIntVec() const { vector<int> r; if(type==4) for(auto& v:arr) r.push_back(v.asInt()); return r; }
+  vector<vector<int>> asIntVecVec() const { vector<vector<int>> r; if(type==4) for(auto& v:arr) r.push_back(v.asIntVec()); return r; }
+  vector<vector<char>> asCharVecVec() const { vector<vector<char>> r; if(type==4) for(auto& v:arr){vector<char> row;for(auto& c:v.arr)row.push_back(c.asStr()[0]);r.push_back(row);} return r; }
+  vector<string> asStrVec() const { vector<string> r; if(type==4) for(auto& v:arr) r.push_back(v.asStr()); return r; }
+};
 
 ${code}
 
@@ -146,14 +392,80 @@ int main() {
   ios::sync_with_stdio(false); cin.tie(nullptr);
   string input, line;
   while (getline(cin, line)) input += line;
-  auto result = ${fnName}(input);
+  auto json = Json::parse(input);
+  Solution sol;
+
+  // Call function with JSON-parsed args based on problem type
+  auto result = [&]() -> string {
+    if (json.type == 4 && json.arr.size() >= 1) {
+      auto& args = json.arr;
+      // Try 2D char array (numIslands)
+      if (args[0].type == 4 && !args[0].arr.empty() && args[0].arr[0].type == 4 && args[0].arr[0].arr[0].type == 3) {
+        auto val = sol.${fnName}(args[0].asCharVecVec());
+        stringstream ss; ss << val; return ss.str();
+      }
+      // Try 2D int array (merge, threeSum, rotateImage)
+      if (args[0].type == 4 && !args[0].arr.empty() && args[0].arr[0].type == 4) {
+        if (args.size() == 1) {
+          auto val = sol.${fnName}(args[0].asIntVecVec());
+          stringstream ss; ss << val; return ss.str();
+        }
+        if (args.size() == 2) {
+          auto val = sol.${fnName}(args[0].asIntVecVec(), args[1].asInt());
+          stringstream ss; ss << val; return ss.str();
+        }
+      }
+      // Try int array + int (coinChange, twoSum)
+      if (args[0].type == 4 && args[0].arr[0].type == 2) {
+        if (args.size() == 1) {
+          auto val = sol.${fnName}(args[0].asIntVec());
+          stringstream ss; ss << val; return ss.str();
+        }
+        if (args.size() == 2) {
+          auto val = sol.${fnName}(args[0].asIntVec(), args[1].asInt());
+          stringstream ss; ss << val; return ss.str();
+        }
+        if (args.size() == 3) {
+          auto val = sol.${fnName}(args[0].asIntVec(), args[1].asInt(), args[2].asInt());
+          stringstream ss; ss << val; return ss.str();
+        }
+      }
+      // Try string + string array (wordBreak, ladderLength)
+      if (args[0].type == 3 && args.size() >= 2 && args[1].type == 4) {
+        auto val = sol.${fnName}(args[0].asStr(), args[1].asStrVec());
+        stringstream ss; ss << val; return ss.str();
+      }
+      // Try string + string + string array (ladderLength with 3 params)
+      if (args[0].type == 3 && args.size() >= 2 && args[1].type == 3) {
+        if (args.size() == 2) {
+          auto val = sol.${fnName}(args[0].asStr(), args[1].asStr());
+          stringstream ss; ss << val; return ss.str();
+        }
+        if (args.size() == 3) {
+          auto val = sol.${fnName}(args[0].asStr(), args[1].asStr(), args[2].asStrVec());
+          stringstream ss; ss << val; return ss.str();
+        }
+      }
+      // Try single string
+      if (args[0].type == 3) {
+        auto val = sol.${fnName}(args[0].asStr());
+        stringstream ss; ss << val; return ss.str();
+      }
+      // Try single int (climbStairs)
+      if (args[0].type == 2) {
+        auto val = sol.${fnName}(args[0].asInt());
+        stringstream ss; ss << val; return ss.str();
+      }
+    }
+    auto val = sol.${fnName}();
+    stringstream ss; ss << val; return ss.str();
+  }();
   cout << result << endl;
   return 0;
 }
 `;
   }
 
-  // ── C ─────────────────────────────────────────────────
   if (langId === 50) {
     return `
 #include <stdio.h>
@@ -177,24 +489,106 @@ int main() {
 `;
   }
 
-  // ── Go ─────────────────────────────────────────────────
   if (langId === 106) {
     return `
 package main
 
 import (
   "bufio"
+  "encoding/json"
   "fmt"
   "os"
+  "reflect"
+  "strconv"
+  "strings"
 )
 
 ${code}
+
+type JsonVal struct {
+  val  interface{}
+  arr  []JsonVal
+  typ  int // 0=null 1=bool 2=num 3=str 4=arr
+}
+
+func parseJson(input string) JsonVal {
+  var val interface{}
+  json.Unmarshal([]byte(input), &val)
+  return toJsonVal(val)
+}
+
+func toJsonVal(v interface{}) JsonVal {
+  if v == nil { return JsonVal{typ: 0} }
+  switch t := v.(type) {
+  case bool: return JsonVal{typ: 1, val: t}
+  case float64: return JsonVal{typ: 2, val: int(t)}
+  case string: return JsonVal{typ: 3, val: t}
+  case []interface{}:
+    arr := make([]JsonVal, len(t))
+    for i, item := range t { arr[i] = toJsonVal(item) }
+    return JsonVal{typ: 4, arr: arr}
+  }
+  return JsonVal{}
+}
+
+func (j JsonVal) asInt() int { if j.typ == 2 { return j.val.(int) }; return 0 }
+func (j JsonVal) asStr() string { if j.typ == 3 { return j.val.(string) }; return "" }
+func (j JsonVal) asIntVec() []int {
+  r := []int{}
+  if j.typ == 4 { for _, v := range j.arr { r = append(r, v.asInt()) } }
+  return r
+}
+func (j JsonVal) asStrVec() []string {
+  r := []string{}
+  if j.typ == 4 { for _, v := range j.arr { r = append(r, v.asStr()) } }
+  return r
+}
+func (j JsonVal) asIntVecVec() [][]int {
+  r := [][]int{}
+  if j.typ == 4 { for _, v := range j.arr { r = append(r, v.asIntVec()) } }
+  return r
+}
+func (j JsonVal) asCharVecVec() [][]byte {
+  r := [][]byte{}
+  if j.typ == 4 { for _, v := range j.arr { r = append(r, []byte(v.asStr())) } }
+  return r
+}
+func toJsonStr(val interface{}) string {
+  b, _ := json.Marshal(val)
+  return string(b)
+}
 
 func main() {
   scanner := bufio.NewScanner(os.Stdin)
   var input string
   for scanner.Scan() { input += scanner.Text() }
-  fmt.Print(${fnName}(input))
+  parsed := parseJson(input)
+  sol := Solution{}
+
+  var result interface{}
+  if parsed.typ == 4 && len(parsed.arr) > 0 {
+    args := parsed.arr
+    if args[0].typ == 4 && len(args[0].arr) > 0 && args[0].arr[0].typ == 4 && len(args[0].arr[0].arr) > 0 && args[0].arr[0].arr[0].typ == 3 {
+      result = sol.${fnName}(args[0].asCharVecVec())
+    } else if args[0].typ == 4 && len(args[0].arr) > 0 && args[0].arr[0].typ == 4 {
+      if len(args) == 1 { result = sol.${fnName}(args[0].asIntVecVec()) }
+    } else if args[0].typ == 4 && len(args[0].arr) > 0 && args[0].arr[0].typ == 2 {
+      if len(args) == 1 { result = sol.${fnName}(args[0].asIntVec()) }
+      if len(args) == 2 { result = sol.${fnName}(args[0].asIntVec(), args[1].asInt()) }
+    } else if args[0].typ == 3 && len(args) >= 2 && args[1].typ == 4 {
+      result = sol.${fnName}(args[0].asStr(), args[1].asStrVec())
+    } else if args[0].typ == 3 && len(args) >= 2 && args[1].typ == 3 {
+      if len(args) == 2 { result = sol.${fnName}(args[0].asStr(), args[1].asStr()) }
+      if len(args) == 3 { result = sol.${fnName}(args[0].asStr(), args[1].asStr(), args[2].asStrVec()) }
+    } else if args[0].typ == 3 {
+      result = sol.${fnName}(args[0].asStr())
+    } else if args[0].typ == 2 {
+      result = sol.${fnName}(args[0].asInt())
+    }
+  } else {
+    result = sol.${fnName}()
+  }
+  fmt.Print(toJsonStr(result))
 }
 `;
   }
