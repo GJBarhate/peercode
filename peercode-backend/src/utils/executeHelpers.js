@@ -308,7 +308,9 @@ try {
   }
 
   if (langId === 71) {
+    const hasSol = code.includes('class Solution');
     return `
+from typing import List, Optional, Dict, Tuple
 ${code}
 
 import json, sys
@@ -325,7 +327,7 @@ try:
         if not isinstance(args, list): args = [args]
     else:
         args = []
-    ${hasSolutionClass ? `sol = Solution(); result = sol.${fnName}(*args)` : `result = ${fnName}(*args)`}
+    ${hasSol ? `sol = Solution(); result = sol.${fnName}(*args)` : `result = ${fnName}(*args)`}
     print(json.dumps(result))
 except Exception as e:
     print(str(e), file=sys.stderr)
