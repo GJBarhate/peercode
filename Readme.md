@@ -117,6 +117,8 @@ After every practice session or interview, an Agenda background job triggers Gem
 
 🔥 **Streaks & Gamification** — Daily session streak stored in `User.streakData`; displayed on the dashboard as a GitHub-style 52-week contribution heatmap built with Recharts
 
+💡 **User Solutions** — Share your solutions with the community. Submit code with language selector + explanation, browse solutions from other users sorted by upvotes, directly within the problem panel
+
 </td>
 <td width="50%">
 
@@ -124,9 +126,13 @@ After every practice session or interview, an Agenda background job triggers Gem
 
 💳 **Subscription Tiers** — Free / Pro / Premium / Ultra plans via Razorpay payment links; webhook payloads verified with HMAC-SHA256; monthly usage counters auto-reset each billing period
 
-🛡️ **Admin Panel** — Subscription revenue analytics (MRR, annual run rate, conversion rate), user ban toggle, full problem CRUD, and problem report resolution in a 5-tab interface
+🛡️ **Admin Panel** — Subscription revenue analytics (MRR, annual run rate, conversion rate), user ban toggle, full problem CRUD with Add/Edit/Archive/Restore, and problem report resolution in a 5-tab interface
+
+🚩 **Report Problem** — Users can report issues (wrong answer, broken test case, unclear description) directly from any problem page. Admins review and resolve reports in the admin panel
 
 🔑 **Personal API Key Bypass** — Users supply their own Gemini key; it's stored server-side and short-circuits all usage checks, giving effective unlimited AI access on any plan
+
+🎨 **Premium UI Theme** — Glass-morphism navbar, smooth theme toggle with spring animations, sky blue accent color, staggered card entrance animations, skeleton loaders with shimmer effect, custom scrollbar styling
 
 </td>
 </tr>
@@ -136,67 +142,68 @@ After every practice session or interview, an Agenda background job triggers Gem
 
 ## 🆕 Recent Improvements
 
-### WebRTC Screen Sharing (Rewrite)
-- **Replaced `addTrack` approach** with `replaceTrack` — standard WebRTC API for swapping camera ↔ screen share tracks
-- **Forced stream refresh** — `refreshRemoteStreamsForPeers()` creates a brand-new `MediaStream` from the receiver's current track on every screen share start/stop, ensuring the remote video element always picks up the latest content
-- **Socket-side refresh** — `onScreenShareStarted`/`onScreenShareStopped` handlers now call `refreshRemoteStreamsForPeers()` on the remote peer, not just updating `peerMediaStates`
-- **Stable video key** — video element uses `key={videoKey}` that changes between `'camera'` and `'screen'`, forcing React to re-mount the `<video>` element with fresh `srcObject`
-- **Async stopScreenShare** — fixed `await` inside non-async `useCallback` that caused runtime `ReferenceError`
+### WebRTC Screen Sharing
+- Replaced `addTrack` with `replaceTrack` — standard WebRTC API for swapping camera ↔ screen share tracks
+- `refreshRemoteStreamsForPeers()` creates a brand-new `MediaStream` from the receiver's current track on every screen share start/stop
+- `onScreenShareStarted`/`onScreenShareStopped` socket handlers force-refresh remote streams on the peer side
+- Video element re-mounts via `key={videoKey}` change between `'camera'` and `'screen'`
+- Fixed `await` inside non-async `useCallback` that caused runtime `ReferenceError`
 
-### Video Panel — Google Meet‑style Layout
-- **Remote user** fills the main area with `object-cover`
-- **Self-view** is a 128×96 PIP in the bottom-right corner
-- **Screen share** displays with `object-contain` + green border + "Screen Share" badge
-- **Waiting state** shows "Waiting for partner to join..." when no remote stream
-- **Maximize/Restore** button expands video to a centered 80vw×80vh overlay with dark backdrop
-- **Mute/Video guards** — toggles check for track existence and show `toast.error` if no microphone/camera available
+### Video Panel
+- Remote user fills main area (`object-cover`), self-view is PIP bottom-right
+- Screen share displays with `object-contain` + green border + badge
+- Maximize/Restore expands video to centered overlay with dark backdrop
+- Mute/Video guards show toast if no track available
 
 ### Room & Peer Connection Stability
-- **`hangUp` cleanup fixed** — `useEffect(() => hangUp(), [socket, hangUp])` previously destroyed all peer connections whenever `roomId` changed, before they could establish. Changed to `hangUpRef` with empty deps so cleanup only runs on component unmount
-- **`createPeerConnection` dedup** — returns existing PC if already created for a peer, preventing overwrite during renegotiation
-- **`syncLocalStream`** called BEFORE `socket.emit('join-room')` so `localStreamRef` is set before signaling events arrive
-- **`getUserMedia` now requests both tracks** — `{ video: true, audio: true }` always, then applies `track.enabled` for mute/disable. Previously used `{ video: !isVideoOff }` which created NO video track when off, making `toggleVideo` a no-op
+- `hangUp` cleanup moved to `hangUpRef` with empty deps — no longer destroys connections on `roomId` change
+- `createPeerConnection` returns existing PC if already created (prevents overwrite)
+- `syncLocalStream` called BEFORE `socket.emit('join-room')`
+- `getUserMedia` always requests both tracks, uses `track.enabled` for mute/disable
 
-### Backend Signaling Improvements
-- **`participant-joined` dedup** — only emitted when `!alreadyInRoom`, preventing duplicate participants from matching queue + lobby join
-- **`user-mic-status` event** — renamed from `media-state-changed` with `userId` in payload for stable identification across reconnects
-- **`hints` and `editorial`** fields added to `problem-updated` broadcast payload
-
-### Matchmaking (Matching Queue)
-- **Role compatibility** — `'any'` (Either role) now correctly matches all roles
-- **Topic case normalized** — topics lowercased before comparison
-- **Server-side 60s timeout** — emits `queue-timeout` event and removes from queue
-- **`matchedRef` guard** — prevents stale cleanup from emitting `queue-leave` after a match
-- **`mountedRef` reset** — re-initialized on socket reconnect
+### Signaling & Matchmaking
+- `participant-joined` dedup — prevents duplicate participants
+- `user-mic-status` event with `userId` for stable identification
+- Matchmaking: `'any'` role matches all, topic case normalized, 60s server timeout, `matchedRef` guard
 
 ### Admin Problem Management
-- **Add/Edit Problem modal** — full form with Title, Slug, Difficulty, Description, Tags, Companies, Constraints, Hints, Editorial, dynamic Examples & Test Cases, per-language Code Templates (starter code, stubs, test harness), Time/Memory limits
-- **Validation** — inline error messages, required field checks, slug format validation, minimum example/test case requirements
-- **Archive/Restore toggle** — single button switches between archiving (`isActive: false`) and restoring (`isActive: true`)
-- **Problem lookup** — backend `getProblem` now accepts both `slug` AND `_id` (ObjectId hex string)
+- **Add/Edit Problem modal** — Title, Slug, Difficulty, Description, Tags, Companies, Constraints, Hints, Editorial, dynamic Examples & Test Cases, per-language Code Templates (starter code, stubs, test harness), Time/Memory limits
+- **Validation** — inline errors, required field checks, slug format validation
+- **Archive/Restore toggle** — single button switches `isActive: false`/`true`
+- **ObjectId lookup** — backend `getProblem` accepts both `slug` and `_id`
 
-### User Solutions (LeetCode‑style)
-- **New `Solution` model** — `{ problem, user, code, language, explanation, upvotes, createdAt }`
-- **API endpoints** — `GET/POST /api/solutions/:problemId`, `PUT /api/solutions/:id/upvote`
-- **Solutions tab** in ProblemPanel — submit code with language selector + explanation, view all solutions sorted by upvotes
-- **Report button** — always visible in ProblemPanel tab bar and ProblemDetailPage toolbar, opens inline report modal with type dropdown + description
+### User Solutions
+- New `Solution` model (`problem`, `user`, `code`, `language`, `explanation`, `upvotes`)
+- API: `GET/POST /api/solutions/:problemId`, `PUT /api/solutions/:id/upvote`
+- Solutions tab in ProblemPanel — submit + browse community solutions
+
+### Problem Reporting
+- Report button in ProblemPanel tab bar and ProblemDetailPage toolbar
+- Inline report modal with type dropdown (wrong answer, broken test case, unclear description, other) + description
+- Admins review and resolve reports in the Admin Panel
 
 ### Track Pages — Complete Redesign
-- **Tracks listing page** — hero header with gradient + glow, search bar with real-time filtering, company-themed card gradients, hover scale animation, progress bars with gradient fill, status buttons (Start/Continue/Completed), empty/no-results states
-- **Track detail page** — hero header with gradient, company badge, difficulty distribution bar, problem search/filter, animated progress bar, clickable problem cards with hover effects, difficulty-colored badges, tag pills, completed state with green glow
+- Tracks listing: hero header with glow, search bar, company-themed gradients, hover scale, progress bars, status buttons
+- Track detail: difficulty distribution bar, problem search/filter, animated progress, clickable cards with hover effects
 
-### Debrief Page — Full Rewrite
-- **Auto-generation** — on 404 (no debrief yet), the page now calls `GET /sessions/:roomId` to get the session `_id`, then `POST /debrief/:sessionId/generate` to trigger AI generation, then polls every 10s until ready
-- **Loading UI** — animated spinner with pulsing rings, attempt counter, status messages
-- **Redesigned display** — hero section with score circle, summary quote block, performance metric bars, "What Went Well" / "Areas to Improve" columns, complexity cards, study next numbered list, gradient "Solve Again" button
-- **Backend** — added missing `auth` middleware to debrief routes, flattened `scores` sub-object to top-level fields, added `tips`, `timeComplexity`, `spaceComplexity`, `duration` mappings
+### Debrief Page
+- Auto-generates AI debrief when none exists (calls `POST /debrief/:sessionId/generate`)
+- Redesigned display: score circle, metrics bars, strengths/improvements columns, complexity cards, study next list
+- Backend: added auth to debrief routes, flattened scores, added `tips`/`complexity`/`duration` mappings
 
-### Dashboard — Layout Fix
-- Replaced individual `mb-8` margins on every section with `space-y-6` on the main container, fixing content being cut off below the viewport
+### Premium UI Theme
+- Glass-morphism navbar with backdrop blur, white in light mode
+- Theme toggle switch with spring-animated sliding knob
+- Sky blue accent color throughout UI
+- Staggered card entrance animations via IntersectionObserver
+- Skeleton loaders with shimmer gradient effect
+- Custom scrollbar styling (6px, accent thumb)
+- `ImageZoom` lightbox component for avatars/images
+- All animations respect `prefers-reduced-motion`
 
 ### Seed Data
-- **20 problems** seeded via `problemSeed.js` (two-sum, valid-parentheses, etc.)
-- **4 tracks** seeded via `trackSeed.js` (Amazon SDE-1, Google L4, DP Mastery, Interview Ready Foundations)
+- 20 problems seeded (two-sum, valid-parentheses, etc.)
+- 4 tracks seeded (Amazon SDE-1, Google L4, DP Mastery, Interview Ready Foundations)
 
 ---
 
