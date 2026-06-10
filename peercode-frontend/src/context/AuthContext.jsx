@@ -155,23 +155,51 @@ export function AuthProvider({ children }) {
       setAccessTokenState(null)
       setApiToken(null)
       
-      // Now perform registration
+      // Now perform registration - returns message, NOT tokens
       const { data } = await axios.post(
         `${API_BASE_URL}/auth/register`,
         { username, email, password },
+        { withCredentials: true }
+      )
+      return data
+    } catch (error) {
+      logger.error('Registration failed:', error)
+      throw error
+    }
+  }, [clearAllSessions])
+
+  const verifyOTP = useCallback(async (email, otp) => {
+    try {
+      const { data } = await axios.post(
+        `${API_BASE_URL}/auth/verify-otp`,
+        { email, otp },
         { withCredentials: true }
       )
       setAccessToken(data.accessToken)
       setUser(data.user)
       return data
     } catch (error) {
-      logger.error('Registration failed:', error)
+      logger.error('OTP verification failed:', error)
       throw error
     }
-  }, [setAccessToken, clearAllSessions])
+  }, [setAccessToken])
+
+  const resendOTP = useCallback(async (email) => {
+    try {
+      const { data } = await axios.post(
+        `${API_BASE_URL}/auth/resend-otp`,
+        { email },
+        { withCredentials: true }
+      )
+      return data
+    } catch (error) {
+      logger.error('Resend OTP failed:', error)
+      throw error
+    }
+  }, [])
 
   return (
-    <AuthContext.Provider value={{ user, setUser, accessToken, setAccessToken, isLoading, login, register, logout, refreshToken }}>
+    <AuthContext.Provider value={{ user, setUser, accessToken, setAccessToken, isLoading, login, register, logout, refreshToken, verifyOTP, resendOTP }}>
       {children}
     </AuthContext.Provider>
   )

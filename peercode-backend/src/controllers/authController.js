@@ -23,28 +23,25 @@ const COOKIE_OPTIONS = {
   path: '/',
 };
 
-function generateVerificationToken() {
-  return crypto.randomBytes(32).toString('hex');
+function generateOTP() {
+  // Generate 6-digit OTP
+  return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-async function sendVerificationEmail(user, token) {
-  const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-email?token=${token}`;
-  
+async function sendOTPEmail(user, otp) {
   const isDev = process.env.NODE_ENV === 'development';
   if (isDev) {
-    logger.info(`[DEV MODE] Verification token for ${user.email}: ${token}`);
-    logger.info(`[DEV MODE] Verification URL: ${verifyUrl}`);
+    logger.info(`[DEV MODE] OTP for ${user.email}: ${otp}`);
   }
 
   await agenda.now('send-email', {
     to: user.email,
-    subject: 'Verify your PeerCode account',
+    subject: 'Your PeerCode Verification Code',
     html: `
       <p>Hi ${user.username},</p>
-      <p>Thanks for signing up for PeerCode! Please verify your email address by clicking the link below:</p>
-      <p><a href="${verifyUrl}">Verify Email</a></p>
-      <p>This link expires in 24 hours.</p>
-      <p>If you didn't create an account, you can safely ignore this email.</p>
+      <p>Your verification code is: <strong style="font-size: 24px; letter-spacing: 4px;">${otp}</strong></p>
+      <p>This code expires in 3 minutes.</p>
+      <p>If you didn't request this code, you can safely ignore this email.</p>
     `,
   });
 }
@@ -56,31 +53,75 @@ async function register(req, res) {
     return fail(res, 400, 'username, email and password are required');
   }
 
+  // Check if user already exists
+  const existingUser = await User.findOne({ email });
+  if (existingUser) {
+    return fail(res, 409, 'Email already registered');
+  }
+
   const passwordHash = await bcrypt.hash(password, 12);
-  const verificationToken = generateVerificationToken();
-  const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+  const otp = generateOTP();
+  const otpExpires = new Date(Date.now() + 3 * 60 * 1000); // 3 minutes
 
   const user = await User.create({ 
     username, 
     email, 
     passwordHash,
     verified: false,
-    emailVerificationToken: verificationToken,
-    emailVerificationExpires: verificationExpires,
+    emailVerificationToken: otp,
+    emailVerificationExpires: otpExpires,
   });
 
-  // Send verification email
+  // Send OTP email
   try {
-    await sendVerificationEmail(user, verificationToken);
+    await sendOTPEmail(user, otp);
   } catch (err) {
-    logger.error('Failed to send verification email:', err);
+    logger.error('Failed to send OTP email:', err);
   }
 
-  // Return success but don't log in the user yet
+  // Return success with message to check email
   res.status(201).json({ 
-    message: 'Registration successful. Please check your email to verify your account.',
+    message: 'Registration successful. Please check your email for the verification code.',
     requiresVerification: true 
   });
+}
+
+async function verifyOTP(req, res) {
+  const { email, otp } = req.body;
+
+  if (!email || !otp) {
+    return fail(res, 400, 'email and OTP are required');
+  }
+
+  const user = await User.findOne({ 
+    email,
+    emailVerificationToken: otp,
+    emailVerificationExpires: { $gt: new Date() }
+  });
+
+  if (!user) {
+    return fail(res, 400, 'Invalid or expired OTP');
+  }
+
+  user.verified = true;
+  user.emailVerificationToken = undefined;
+  user.emailVerificationExpires = undefined;
+  await user.save();
+
+  // Auto-login after verification
+  const tokenPayload = {
+    id: user._id.toString(),
+    username: user.username,
+    email: user.email,
+    role: user.role,
+    apiKey: user.apiKey || null,
+  };
+
+  const accessToken = signToken(tokenPayload);
+  const refreshToken = signRefreshToken({ id: user._id.toString(), tokenVersion: user.tokenVersion || 0 });
+
+  res.cookie('refreshToken', refreshToken, COOKIE_OPTIONS);
+  res.json({ accessToken, user: tokenPayload });
 }
 
 async function login(req, res) {
@@ -105,12 +146,7 @@ async function login(req, res) {
     return fail(res, 429, `Account temporarily locked. Try again in ${remainingMinutes} minute(s).`);
   }
 
-  // Allow login without verification in development mode
-  const isDev = process.env.NODE_ENV === 'development';
-  if (!user.verified && !isDev) {
-    return fail(res, 403, 'Please verify your email address before logging in. Check your inbox for a verification link.');
-  }
-
+  // Just check credentials - no email verification required
   const isMatch = await bcrypt.compare(password, user.passwordHash);
   if (!isMatch) {
     // Increment login attempts
@@ -195,31 +231,7 @@ async function refresh(req, res) {
   res.json({ accessToken, user: tokenPayload });
 }
 
-async function verifyEmail(req, res) {
-  const { token } = req.query;
-
-  if (!token) {
-    return fail(res, 400, 'Verification token is required');
-  }
-
-  const user = await User.findOne({ 
-    emailVerificationToken: token,
-    emailVerificationExpires: { $gt: new Date() }
-  });
-
-  if (!user) {
-    return fail(res, 400, 'Invalid or expired verification token');
-  }
-
-  user.verified = true;
-  user.emailVerificationToken = undefined;
-  user.emailVerificationExpires = undefined;
-  await user.save();
-
-  success(res, { message: 'Email verified successfully. You can now log in.' });
-}
-
-async function resendVerificationEmail(req, res) {
+async function resendOTP(req, res) {
   const { email } = req.body;
 
   if (!email) {
@@ -229,27 +241,27 @@ async function resendVerificationEmail(req, res) {
   const user = await User.findOne({ email });
   if (!user) {
     // Don't reveal if user exists
-    return success(res, { message: 'If the email exists, a verification link has been sent.' });
+    return success(res, { message: 'If the email exists, an OTP has been sent.' });
   }
 
   if (user.verified) {
     return fail(res, 400, 'Account is already verified');
   }
 
-  const verificationToken = generateVerificationToken();
-  const verificationExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const otp = generateOTP();
+  const otpExpires = new Date(Date.now() + 3 * 60 * 1000); // 3 minutes
 
-  user.emailVerificationToken = verificationToken;
-  user.emailVerificationExpires = verificationExpires;
+  user.emailVerificationToken = otp;
+  user.emailVerificationExpires = otpExpires;
   await user.save();
 
   try {
-    await sendVerificationEmail(user, verificationToken);
+    await sendOTPEmail(user, otp);
   } catch (err) {
-    logger.error('Failed to resend verification email:', err);
+    logger.error('Failed to resend OTP:', err);
   }
 
-  success(res, { message: 'If the email exists, a verification link has been sent.' });
+  success(res, { message: 'If the email exists, a new OTP has been sent.' });
 }
 
 async function googleAuth(req, res) {
@@ -404,4 +416,4 @@ async function logout(req, res) {
   res.status(200).json({ message: 'Logged out successfully' });
 }
 
-module.exports = { register, login, refresh, logout, verifyEmail, resendVerificationEmail, googleAuth, linkGoogleAccount, unlinkGoogleAccount };
+module.exports = { register, login, refresh, logout, verifyOTP, resendOTP, googleAuth, linkGoogleAccount, unlinkGoogleAccount };

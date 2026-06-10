@@ -10,7 +10,7 @@ import { getErrorMessage, googleAuth } from '../services/api'
 import toast from 'react-hot-toast'
 
 export default function HomePage() {
-  const { user, login, register } = useAuth()
+  const { user, login, register, verifyOTP, resendOTP } = useAuth()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const showRegister = searchParams.get('register') === '1'
@@ -20,6 +20,9 @@ export default function HomePage() {
   const [showConfirmPass, setShowConfirmPass] = useState(false)
   const [formData, setFormData] = useState({ username: '', email: '', password: '', confirmPassword: '' })
   const [validationErrors, setValidationErrors] = useState({})
+  const [showOTP, setShowOTP] = useState(false)
+  const [otp, setOtp] = useState('')
+  const [registeredEmail, setRegisteredEmail] = useState('')
 
   const handleSubmit = async () => {
     setValidationErrors({})
@@ -47,10 +50,13 @@ export default function HomePage() {
           setTimeout(() => navigate('/dashboard'), 100)
         }
       } else {
+        // Registration - returns message, not tokens
         const res = await register(formData.username, formData.email, formData.password)
-        if (res.user && res.accessToken) {
-          toast.success('Account created!')
-          setTimeout(() => navigate('/dashboard'), 100)
+        if (res.requiresVerification) {
+          // Show OTP verification UI
+          setShowOTP(true)
+          setRegisteredEmail(formData.email)
+          toast.success('Registration successful! Check your email for the verification code.')
         }
       }
     } catch (err) {
@@ -63,6 +69,40 @@ export default function HomePage() {
         toast.error(errorMsg)
       }
       console.error('Auth error:', err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleVerifyOTP = async () => {
+    if (!otp || otp.length !== 6) {
+      toast.error('Please enter a valid 6-digit OTP')
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const res = await verifyOTP(registeredEmail, otp)
+      if (res.user && res.accessToken) {
+        toast.success('Email verified! Welcome to PeerCode!')
+        setTimeout(() => navigate('/dashboard'), 100)
+      }
+    } catch (err) {
+      const errorMsg = getErrorMessage(err, 'Verification failed')
+      toast.error(errorMsg)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleResendOTP = async () => {
+    setIsLoading(true)
+    try {
+      await resendOTP(registeredEmail)
+      toast.success('New OTP sent to your email!')
+    } catch (err) {
+      const errorMsg = getErrorMessage(err, 'Failed to resend OTP')
+      toast.error(errorMsg)
     } finally {
       setIsLoading(false)
     }
@@ -308,6 +348,38 @@ export default function HomePage() {
                       {isLoading ? <Spinner size="sm" /> : null}
                       {isLogin ? 'Sign In' : 'Create Account'}
                     </button>
+                    {showOTP && (
+                      <div className="space-y-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+                        <div>
+                          <label className="label">Verification Code</label>
+                          <input
+                            type="text"
+                            value={otp}
+                            onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                            placeholder="Enter 6-digit OTP"
+                            maxLength={6}
+                            className="input-field text-center text-lg tracking-widest font-mono"
+                            onKeyDown={e => { if (e.key === 'Enter') handleVerifyOTP() }}
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Check your email for the verification code</p>
+                        </div>
+                        <button
+                          onClick={handleVerifyOTP}
+                          disabled={isLoading || otp.length !== 6}
+                          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-white bg-green-600 hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                        >
+                          {isLoading ? <Spinner size="sm" /> : null}
+                          Verify & Login
+                        </button>
+                        <button
+                          onClick={handleResendOTP}
+                          disabled={isLoading}
+                          className="w-full text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
+                        >
+                          Didn't receive code? Resend OTP
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (
