@@ -63,7 +63,7 @@ Native WebRTC `RTCPeerConnection` with 3 Google STUN servers. Socket.IO is signa
 
 **🤖 Gemini AI Assistant**
 
-Gemini Flash with a 7-key round-robin pool that auto-skips any key returning HTTP 429. Three modes: contextual hints (never reveals full solutions), structured code analysis with complexity breakdown, and DSA question generation for interviewers.
+Gemini 3.1 Flash Lite with a 7-key round-robin pool that auto-skips any key returning HTTP 429 or 400 (invalid key). Three modes: contextual hints (never reveals full solutions), structured code analysis with complexity breakdown, and DSA question generation for interviewers. Users can bring their own API key via Settings to bypass pool limits.
 
 </td>
 </tr>
@@ -206,28 +206,42 @@ sequenceDiagram
     participant API as Express API
     participant DB as MongoDB
 
-    Note over C,DB: Registration
+    Note over C,DB: Registration with OTP
     C->>API: POST /api/auth/register {username, email, password}
     API->>API: bcrypt.hash(password, 12 rounds)
-    API->>DB: User.create({username, email, passwordHash})
-    API-->>C: 201 {accessToken, user} + httpOnly refreshToken cookie
+    API->>DB: User.create({username, email, passwordHash, verified: false})
+    API->>DB: Store 6-digit OTP with 3-minute expiry
+    API-->>C: 201 {message, requiresVerification: true}
+    C->>API: POST /api/auth/verify-otp {email, otp}
+    API->>DB: Verify OTP + mark verified: true
+    API-->>C: 200 {accessToken, user} + httpOnly refreshToken cookie
 
-    Note over C,DB: Silent Token Refresh on 401
+    Note over C,DB: Google OAuth
+    C->>C: Redirect to Google consent screen
+    C->>API: POST /api/auth/google {code}
+    API->>Google: Exchange code for id_token
+    Google-->>API: {sub, email, name, picture}
+    API->>DB: Find or create user by googleId/email
+    API-->>C: 200 {accessToken, user} + httpOnly refreshToken cookie
+
+    Note over C,DB: Silent Token Refresh on 401 (global dedup)
     C->>A: Request to protected route
     A->>A: Attach Bearer accessToken
     A->>API: GET /api/dashboard
     API-->>A: 401 TOKEN_EXPIRED
+    A->>A: sharedRefreshPromise — only one refresh at a time
     A->>API: POST /api/auth/refresh (httpOnly cookie sent automatically)
-    API->>API: jwt.verify(refreshToken, JWT_REFRESH_SECRET)
-    API-->>A: 200 {accessToken, user}
-    A->>A: Update stored accessToken
+    API->>API: jwt.verify(refreshToken, JWT_REFRESH_SECRET) + tokenVersion check
+    API->>DB: findOneAndUpdate tokenVersion (atomic $inc)
+    API-->>A: 200 {accessToken, user} + new refresh cookie
+    A->>A: Update stored accessToken, replay queued requests
     A->>API: Retry original request with new token
     API-->>C: 200 dashboard data
 
     Note over C,DB: Logout
     C->>API: POST /api/auth/logout
-    API-->>C: 200 + clears refreshToken cookie
-    C->>C: localStorage.clear() + redirect /
+    API-->>C: 200 + clears refreshToken cookie with matching options
+    C->>C: sessionStorage.clear() + redirect /
 ```
 
 ---
@@ -244,7 +258,7 @@ sequenceDiagram
 | <img src="https://img.shields.io/badge/Express-000000?style=flat-square&logo=express&logoColor=white"/> | **Express** | 4.18 | Minimal surface area; the 9-step middleware chain maps 1:1 with the request lifecycle: security → parsing → auth → rate-limiting |
 | <img src="https://img.shields.io/badge/MongoDB-47A248?style=flat-square&logo=mongodb&logoColor=white"/> | **MongoDB** | 7 (Atlas) | Session snapshots are deeply nested arrays; the document model eliminates the 4-table joins a relational schema would require |
 | <img src="https://img.shields.io/badge/Socket.IO-010101?style=flat-square&logo=socketdotio&logoColor=white"/> | **Socket.IO** | 4.7 | Binary frame support for Yjs CRDT diffs; automatic polling fallback for corporate firewalls; built-in room abstraction |
-| <img src="https://img.shields.io/badge/JWT-000000?style=flat-square&logo=jsonwebtokens&logoColor=white"/> | **JWT** | — | Stateless auth: 15-minute access tokens + 7-day refresh tokens in httpOnly cookies — no server-side session store needed |
+| <img src="https://img.shields.io/badge/JWT-000000?style=flat-square&logo=jsonwebtokens&logoColor=white"/> | **JWT** | — | Stateless auth: 60-minute access tokens + 7-day refresh tokens in httpOnly cookies with tokenVersion rotation — no server-side session store needed |
 | <img src="https://img.shields.io/badge/bcryptjs-6d28d9?style=flat-square&logoColor=white"/> | **bcryptjs** | 2.4 | 12 salt rounds (~250 ms per hash); `passwordHash` uses `select: false` — never accidentally exposed in responses |
 | <img src="https://img.shields.io/badge/Agenda-4f46e5?style=flat-square&logoColor=white"/> | **Agenda** | 5.0 | MongoDB-backed job queue; no additional Redis infrastructure for debrief generation, email dispatch, and weekly digest jobs |
 | <img src="https://img.shields.io/badge/Razorpay-0C2451?style=flat-square&logo=razorpay&logoColor=white"/> | **Razorpay** | 2.9 | Payment link model fits one-time subscription activation without a recurring subscription entity to manage |
@@ -674,7 +688,7 @@ MONGO_URI=mongodb+srv://user:pass@cluster.mongodb.net/?appName=Cluster0
 # REQUIRED — server retries 5 times with exponential backoff then exits
 
 # ════════ JWT ══════════════════════════════════════════════════════════
-JWT_SECRET=<64-char hex>           # REQUIRED — signs 15-minute access tokens
+JWT_SECRET=<64-char hex>           # REQUIRED — signs 60-minute access tokens
 JWT_REFRESH_SECRET=<64-char hex>   # REQUIRED — signs 7-day refresh tokens in httpOnly cookies
 # Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
@@ -686,6 +700,11 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your@gmail.com
 SMTP_PASS=<gmail-app-password>      # Use a Gmail App Password, not your account password
+
+# ════════ GOOGLE OAUTH ═════════════════════════════════════════════════
+GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com  # From Google Cloud Console > Credentials
+GOOGLE_CLIENT_SECRET=GOCSPX-xxx                  # OAuth 2.0 Client Secret
+GOOGLE_REDIRECT_URI=http://localhost:5173/auth/callback  # Must match authorized redirect URI
 
 # ════════ GEMINI AI ════════════════════════════════════════════════════
 GEMINI_KEY_1=AIza...    # REQUIRED for AI features — free keys from aistudio.google.com
@@ -728,10 +747,15 @@ GET http://localhost:5000/api/health
 
 | Method | Endpoint | Auth | Body | Response | Description |
 |---|---|:---:|---|---|---|
-| `POST` | `/register` | ❌ | `{username, email, password}` | 201 `{accessToken, user}` + refresh cookie | Create account; bcrypt 12 rounds |
-| `POST` | `/login` | ❌ | `{email, password}` | 200 `{accessToken, user}` + refresh cookie | Issue tokens |
-| `POST` | `/refresh` | ❌ | Cookie: `refreshToken` | 200 `{accessToken, user}` | Silent refresh on 401 |
-| `POST` | `/logout` | ❌ | Cookie: `refreshToken` | 200 | Clear httpOnly refresh cookie |
+| `POST` | `/register` | ❌ | `{username, email, password}` | 201 `{requiresVerification: true}` | Create account; sends 6-digit OTP email |
+| `POST` | `/verify-otp` | ❌ | `{email, otp}` | 200 `{accessToken, user}` + refresh cookie | Verify OTP (3-min expiry) and log in |
+| `POST` | `/resend-otp` | ❌ | `{email}` | 200 | Resend 6-digit OTP |
+| `POST` | `/login` | ❌ | `{email, password}` | 200 `{accessToken, user}` + refresh cookie | Issue tokens; 5-attempt lockout |
+| `POST` | `/google` | ❌ | `{code}` | 200 `{accessToken, user}` + refresh cookie | Google OAuth authorization code flow |
+| `POST` | `/link-google` | ✅ | `{code}` | 200 | Link Google account to existing user |
+| `POST` | `/unlink-google` | ✅ | — | 200 | Unlink Google account (requires password) |
+| `POST` | `/refresh` | ❌ | Cookie: `refreshToken` | 200 `{accessToken, user}` | Silent refresh on 401; atomic tokenVersion increment |
+| `POST` | `/logout` | ❌ | Cookie: `refreshToken` | 200 | Clear httpOnly refresh cookie with matching options |
 
 > Duplicate username or email returns `409 DUPLICATE_FIELD`.
 
@@ -845,6 +869,17 @@ GET http://localhost:5000/api/health
 | `GET` | `/:slug` | ❌ | `slug` | `{track}` | Single track with ordered + populated problems |
 | `GET` | `/:slug/progress` | ✅ | `slug` | `{progress}` | Per-user progress for a single track |
 | `POST` | `/:slug/complete-problem` | ✅ | `{problemId}` | 200 | Mark problem done; sets `completedAt` when all complete |
+
+</details>
+
+<details>
+<summary><b>⭐ Ratings — /api/ratings</b> (auth required)</summary>
+
+| Method | Endpoint | Auth | Body | Response | Description |
+|---|---|---|---|---|---|
+| `POST` | `/` | ✅ | `{sessionId, toUserId, score, feedback?}` | 200 `{rating}` | Submit or update peer rating; validates session participants |
+| `GET` | `/me` | ✅ | — | `{ratings[]}` | Ratings received by current user |
+| `GET` | `/:userId` | ✅ | `userId` | `{ratings[]}` | Ratings received by a specific user |
 
 </details>
 
