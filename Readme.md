@@ -61,9 +61,118 @@ Native WebRTC `RTCPeerConnection` with 3 Google STUN servers. Socket.IO is signa
 </td>
 <td width="33%" valign="top">
 
+## ✨ Features
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+**🖊️ Collaborative Code Editor**
+
+Monaco editor (VS Code's engine) with Yjs CRDT sync over Socket.IO binary frames. Two users edit conflict-free — remote cursors as absolute-positioned overlays via `y-monaco`. Debounced snapshots push to MongoDB every 5 seconds for full session replay. 7 languages with syntax highlighting + IntelliSense.
+
+</td>
+<td width="33%" valign="top">
+
+**📹 Peer-to-Peer Video Chat**
+
+Native WebRTC `RTCPeerConnection` with Google STUN servers. Socket.IO is signaling only — media travels browser-to-browser. Mute, camera-off, screen sharing. Self-view PIP, remote fills main area, per-user mute/video state broadcast over socket.
+
+</td>
+<td width="33%" valign="top">
+
 **🤖 Gemini AI Assistant**
 
-Gemini 3.1 Flash Lite with a 7-key round-robin pool that auto-skips any key returning HTTP 429 or 400 (invalid key). Three modes: contextual hints (never reveals full solutions), structured code analysis with complexity breakdown, and DSA question generation for interviewers. Users can bring their own API key via Settings to bypass pool limits.
+Gemini 3.1 Flash Lite with 7-key round-robin pool (auto-skips 429/400). Three modes: contextual hints (never reveals full solutions), structured code analysis with time + space complexity + feedback, and DSA question generation for interviewers. Bring your own API key to bypass pool limits.
+
+</td>
+</tr>
+<tr>
+<td width="33%" valign="top">
+
+**🎙️ AI Voice Interview**
+
+AI-driven mock interview with speech recognition + text-to-speech. Gemini generates DSA questions by topic/difficulty, evaluates answers in real time, provides structured feedback with overall score and verdict (Hire / Strong Hire / Lean Hire / No Hire). Supports both voice and typed answers.
+
+</td>
+<td width="33%" valign="top">
+
+**⚡ Automated Code Execution**
+
+Judge0 CE runs code against visible + hidden test cases. Custom `wrapCodeForTest` harness for all 7 languages. Results include per-test pass/fail, execution time, memory, and stderr. Real-time test runner in-editor.
+
+</td>
+<td width="33%" valign="top">
+
+**🎯 ELO-Based Peer Matching**
+
+In-memory queue matches users within ±200 ELO, filtered by role (interviewer / interviewee / either) and topic. 60-second server timeout with socket liveness check. Disconnected partners re-queue cleanly.
+
+</td>
+</tr>
+<tr>
+<td width="33%" valign="top">
+
+**📊 AI Post-Session Debrief**
+
+Agenda background job triggers Gemini after every session. Scores: communication (1–5), problem decomposition (1–5), code quality (1–5), complexity (1–5), overall readiness (1–10). Includes summary, strengths, improvements, study tips, and weak topics.
+
+</td>
+<td width="33%" valign="top">
+
+**🔐 OTP + Google Auth**
+
+Registration sends 6-digit OTP email (3-minute expiry). Login with email/password or Google OAuth. JWT dual-token: 60-minute access + 7-day refresh with atomic tokenVersion rotation. Global refresh dedup prevents race conditions. Account lockout after 5 failed attempts.
+
+</td>
+<td width="33%" valign="top">
+
+**💬 Real-Time Chat + Timer**
+
+Built-in messaging with history persistence and auto-scroll. Multi-phase interview timer (Setup / Coding / Q&A / Ended) with SVG ring, socket-synced to all peers. Interviewer notes with hire/no-hire toggle.
+
+</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+🏆 **ELO Rating System** — 1200 base, K=32 with difficulty + duration modifiers; Recharts trend chart with per-session deltas
+
+⏱️ **Multi-Phase Timer** — Setup (5m) → Coding (35m) → Q&A (5m) → Ended; SVG ring, socket-synced, pause/resume
+
+📼 **Session Replay** — Scrubable snapshot playback with line-level diffs, approach-restart detection, pause markers
+
+🔥 **Streaks & Gamification** — GitHub-style 52-week contribution heatmap, achievement badges
+
+📚 **Learning Tracks** — Company playlists (Amazon, Google, Meta, Microsoft) with per-user progress tracking
+
+💡 **Community Solutions** — Submit code + explanation; browse and upvote peer solutions
+
+⭐ **Peer Rating** — Rate partners 1-5 stars with optional feedback after sessions; duplicate-safe
+
+</td>
+<td width="50%" valign="top">
+
+🏅 **Leaderboard** — Global ELO ranking with pagination; view rank, wins, losses, rating trend
+
+💳 **Subscription Tiers** — Free / Pro / Premium / Ultra via Razorpay; HMAC-SHA256 webhooks; monthly reset
+
+🛡️ **Admin Panel** — MRR/ARR analytics, user ban toggle, problem CRUD, report resolution
+
+🚩 **Problem Reporting** — Flag incorrect test cases, unclear descriptions; admins resolve
+
+🔑 **Personal API Key** — Bring your own Gemini key; bypasses all usage limits
+
+🎨 **Premium UI** — Glass-morphism, spring animations, skeleton loaders, custom cursor, particle BG, parallax cards, ripple buttons, Cmd+K palette, sound bars, confetti
+
+🔔 **Notifications** — In-app bell icon with real-time socket delivery and mark-read
+
+</td>
+</tr>
+</table>
 
 </td>
 </tr>

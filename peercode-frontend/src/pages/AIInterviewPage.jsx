@@ -101,11 +101,22 @@ function useSpeech() {
 
   const stopSpeaking = useCallback(() => { synth.current.cancel(); setIsSpeaking(false) }, [])
 
-  const startListening = useCallback(() => {
-    if (!recRef.current) { toast.error('Speech recognition not supported'); return }
+  const startListening = useCallback(async () => {
+    if (!recRef.current) { toast.error('Speech recognition not supported in this browser'); return }
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch {
+      toast.error('Microphone access denied. Please allow microphone permissions in your browser settings.')
+      return
+    }
     finalRef.current = ''; setTranscript('')
     wantRef.current = true
-    try { recRef.current.start(); setIsListening(true) } catch {}
+    try { recRef.current.start(); setIsListening(true) } catch (e) {
+      if (e.name === 'InvalidStateError') {
+        recRef.current.abort()
+        setTimeout(() => { try { recRef.current?.start(); setIsListening(true) } catch {} }, 100)
+      }
+    }
   }, [])
 
   const stopListening = useCallback(() => {
