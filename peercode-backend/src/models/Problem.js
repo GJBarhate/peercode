@@ -97,6 +97,21 @@ const ProblemSchema = new mongoose.Schema(
       go: String,
     },
     hints: [String],
+    editorial: {
+      type: String,
+      default: '',
+    },
+    solutions: {
+      type: {
+        javascript: String,
+        typescript: String,
+        python: String,
+        java: String,
+        cpp: String,
+        go: String,
+      },
+      select: false,
+    },
   },
   { timestamps: true }
 );
@@ -104,5 +119,6 @@ const ProblemSchema = new mongoose.Schema(
 ProblemSchema.index({ difficulty: 1 });
 ProblemSchema.index({ tags: 1 });
 ProblemSchema.index({ companies: 1 });
+ProblemSchema.index({ difficulty: 1, isActive: 1 });
 
 module.exports = mongoose.model('Problem', ProblemSchema);

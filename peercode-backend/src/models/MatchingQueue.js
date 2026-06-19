@@ -40,7 +40,7 @@ const MatchingQueueSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-MatchingQueueSchema.index({ joinedAt: 1 });
-MatchingQueueSchema.index({ preferredRole: 1, preferredTopic: 1 });
+MatchingQueueSchema.index({ joinedAt: 1 }, { expireAfterSeconds: 300 });
+MatchingQueueSchema.index({ preferredRole: 1, preferredTopic: 1, joinedAt: 1 });
 
 module.exports = mongoose.model('MatchingQueue', MatchingQueueSchema);

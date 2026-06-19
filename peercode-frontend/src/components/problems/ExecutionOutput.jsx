@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Play, Trash2, Code, Terminal } from 'lucide-react'
 import Spinner from '../common/Spinner'
+import { executeCode, getErrorMessage } from '../../services/api'
 
 export default function ExecutionOutput({ code, language, onClear }) {
   const [output, setOutput] = useState('')
@@ -11,36 +12,25 @@ export default function ExecutionOutput({ code, language, onClear }) {
   const terminalRef = useRef(null)
 
   const handleRunCode = async () => {
+    if (!code?.trim()) {
+      setError('No code to run')
+      return
+    }
     setIsRunning(true)
     setError(null)
     setLogs([])
 
     try {
-      // Simulate code execution with basic output
-      const consoleLogBackup = console.log
-      const outputs = []
-
-      console.log = (...args) => {
-        outputs.push(args.map(a => String(a)).join(' '))
-        consoleLogBackup(...args)
-      }
-
-      // Execute code in isolated context
-      if (language === 'javascript') {
-        try {
-          new Function(code)()
-        } catch (e) {
-          setError(e.message)
-        }
+      const { data } = await executeCode({ code, language, stdin: input })
+      if (data?.error) {
+        setError(data.error)
       } else {
-        setError(`Language ${language} not supported in browser. Use Run Tests instead.`)
+        const out = (data?.output ?? '').toString()
+        setOutput(out)
+        setLogs(out ? out.split('\n').filter(Boolean) : [])
       }
-
-      console.log = consoleLogBackup
-      setLogs(outputs)
-      setOutput(outputs.join('\n'))
     } catch (err) {
-      setError(err.message || 'Execution failed')
+      setError(getErrorMessage(err, 'Execution failed'))
     } finally {
       setIsRunning(false)
     }
@@ -59,8 +49,8 @@ export default function ExecutionOutput({ code, language, onClear }) {
     try {
       const text = await navigator.clipboard.readText()
       setInput(prev => prev + text)
-    } catch (err) {
-      console.error('Paste failed:', err)
+    } catch {
+      // paste unavailable — user can type manually
     }
   }
 

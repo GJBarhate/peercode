@@ -133,18 +133,18 @@ export default function ContributionHeatmap({ sessions = [] }) {
 
             <div className="flex" style={{ gap: `${CELL_GAP}px` }}>
               <div className="flex flex-col shrink-0 pt-[2px]" style={{ gap: `${CELL_GAP}px`, width: '36px' }}>
-                {DAY_INDICES.map((_, i) => (
-                  <div
-                    key={i}
-                    className="text-[10px] text-gray-500 dark:text-[#5a5a72] font-medium leading-none flex items-center"
-                    style={{ height: `${CELL_SIZE}px` }}
-                  >
-                    {DAY_LABELS[i]}
-                  </div>
-                ))}
-                {DAY_INDICES.length < 7 && (
-                  <div style={{ height: `${(7 - DAY_INDICES.length) * (CELL_SIZE + CELL_GAP) - CELL_GAP}px` }} />
-                )}
+                {Array.from({ length: 7 }).map((_, rowIdx) => {
+                  const labelIdx = DAY_INDICES.indexOf(rowIdx)
+                  return (
+                    <div
+                      key={rowIdx}
+                      className="text-[10px] text-gray-500 dark:text-[#5a5a72] font-medium leading-none flex items-center"
+                      style={{ height: `${CELL_SIZE}px` }}
+                    >
+                      {labelIdx >= 0 ? DAY_LABELS[labelIdx] : ''}
+                    </div>
+                  )
+                })}
               </div>
 
               <div className="flex" style={{ gap: `${CELL_GAP}px` }}>

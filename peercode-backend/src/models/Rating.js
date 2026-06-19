@@ -34,5 +34,7 @@ const RatingSchema = new mongoose.Schema({
 });
 
 RatingSchema.index({ toUser: 1, createdAt: -1 });
+RatingSchema.index({ fromUser: 1 });
+RatingSchema.index({ fromUser: 1, toUser: 1, roomId: 1 }, { unique: true });
 
 module.exports = mongoose.model('Rating', RatingSchema);

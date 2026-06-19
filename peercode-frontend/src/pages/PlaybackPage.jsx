@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Helmet } from 'react-helmet-async'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, BarChart3, Play, ExternalLink } from 'lucide-react'
 import Navbar from '../components/common/Navbar'
@@ -17,6 +18,7 @@ export default function PlaybackPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const [activeTab, setActiveTab] = useState('replay')
+  const [problemSnapshot, setProblemSnapshot] = useState(null)
 
   const handleRetry = async () => {
     setError(null)
@@ -24,6 +26,7 @@ export default function PlaybackPage() {
     try {
       const { data } = await getPlayback(roomId)
       setSnapshots(data.snapshots || data || [])
+      if (data.problemSnapshot) setProblemSnapshot(data.problemSnapshot)
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load playback')
     } finally {
@@ -37,6 +40,7 @@ export default function PlaybackPage() {
       try {
         const { data } = await getPlayback(roomId)
         setSnapshots(data.snapshots || data || [])
+        if (data.problemSnapshot) setProblemSnapshot(data.problemSnapshot)
       } catch (err) {
         setError(err.response?.data?.message || 'Failed to load playback')
       } finally {
@@ -73,22 +77,12 @@ export default function PlaybackPage() {
     )
   }
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-950">
-        <Navbar />
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="text-center">
-            <p className="text-red-400 mb-4">{error}</p>
-            <Link to="/dashboard" className="btn-secondary text-sm">Back to Dashboard</Link>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="min-h-screen bg-gray-950">
+      <Helmet>
+        <title>Session Playback | PeerCode</title>
+        <meta name="description" content="Replay your coding session" />
+      </Helmet>
       <Navbar />
       <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-24 pb-16">
         <div className="flex items-center gap-3 mb-6">
@@ -100,7 +94,16 @@ export default function PlaybackPage() {
             Dashboard
           </Link>
           <span className="text-gray-700">/</span>
-          <h1 className="text-xl font-bold text-gray-100">Session Playback</h1>
+          <h1 className="text-xl font-bold text-gray-100">
+            {problemSnapshot?.title ? `${problemSnapshot.title} — Playback` : 'Session Playback'}
+          </h1>
+          {problemSnapshot?.difficulty && (
+            <span className={`text-xs font-bold px-2 py-0.5 rounded capitalize border ${
+              problemSnapshot.difficulty === 'easy' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+              : problemSnapshot.difficulty === 'hard' ? 'bg-red-500/10 text-red-400 border-red-500/20'
+              : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+            }`}>{problemSnapshot.difficulty}</span>
+          )}
           <div className="ml-auto">
             <Link
               to={`/debrief/${roomId}`}

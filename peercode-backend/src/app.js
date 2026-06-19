@@ -33,6 +33,11 @@ const adminRouter = require('./routes/admin');
 const geminiKeyRouter = require('./routes/geminiKey');
 const subscriptionRouter = require('./routes/subscription');
 const solutionsRouter = require('./routes/solutions');
+const interviewRouter = require('./routes/interview');
+const ratingsRouter = require('./routes/ratings');
+const statsRouter = require('./routes/stats');
+const leaderboardRouter = require('./routes/leaderboard');
+const notificationsRouter = require('./routes/notifications');
 
 const app = express();
 
@@ -41,7 +46,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+      scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", process.env.FRONTEND_URL || 'http://localhost:5173'],
@@ -106,10 +111,15 @@ app.use('/api/admin', auth, adminRouter);
 app.use('/api/gemini-key', auth, geminiKeyRouter);
 app.use('/api/subscription', subscriptionRouter);
 app.use('/api/solutions', auth, apiLimiter, solutionsRouter);
+app.use('/api/interview', auth, userGeminiLimiter, interviewRouter);
+app.use('/api/ratings', apiLimiter, ratingsRouter);
+app.use('/api/stats', statsRouter);
+app.use('/api/leaderboard', leaderboardRouter);
+app.use('/api/notifications', notificationsRouter);
 
 // 404 handler
 app.use((req, res) => {
-  fail(res, 404, 'Route not found');
+  return fail(res, 404, 'Route not found');
 });
 
 // Global error handler

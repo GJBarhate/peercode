@@ -37,4 +37,7 @@ const ProblemReportSchema = new mongoose.Schema({
   },
 });
 
+ProblemReportSchema.index({ resolved: 1, createdAt: -1 });
+ProblemReportSchema.index({ problem: 1, reportedBy: 1 }, { unique: true });
+
 module.exports = mongoose.model('ProblemReport', ProblemReportSchema);

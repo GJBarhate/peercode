@@ -4,6 +4,7 @@ let accessTokenRef = null
 let refreshingToken = false
 let refreshSubscribers = []
 let tokenRefreshHandler = null
+let sharedRefreshPromise = null
 
 const isDev = import.meta.env.DEV
 export const API_BASE_URL = import.meta.env.VITE_API_URL || (isDev ? 'http://localhost:5000/api' : null)
@@ -47,6 +48,31 @@ export function setTokenRefreshHandler(handler) {
   tokenRefreshHandler = handler
 }
 
+// Shared refresh function with global dedup — used by both AuthContext and API interceptor
+export async function refreshAccessToken() {
+  if (sharedRefreshPromise) return sharedRefreshPromise
+
+  sharedRefreshPromise = (async () => {
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/auth/refresh`,
+        {},
+        { withCredentials: true, timeout: 5000 }
+      )
+      accessTokenRef = response.data.accessToken
+      tokenRefreshHandler?.(response.data.accessToken, response.data.user)
+      return response.data.accessToken
+    } catch (err) {
+      accessTokenRef = null
+      return null
+    } finally {
+      sharedRefreshPromise = null
+    }
+  })()
+
+  return sharedRefreshPromise
+}
+
 let geminiKeyRef = null
 export function setGeminiKey(key) {
   geminiKeyRef = key
@@ -58,7 +84,8 @@ export function getErrorMessage(error, fallback = 'Something went wrong') {
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  withCredentials: true
+  withCredentials: true,
+  timeout: 15000,
 })
 
 api.interceptors.request.use(config => {
@@ -89,25 +116,16 @@ api.interceptors.response.use(
       refreshingToken = true
       
       try {
-        const response = await axios.post(
-          `${API_BASE_URL}/auth/refresh`,
-          {},
-          { 
-            withCredentials: true,
-            timeout: 5000
-          }
-        )
-        
-        accessTokenRef = response.data.accessToken
-        tokenRefreshHandler?.(response.data.accessToken, response.data.user)
-        
+        const newToken = await refreshAccessToken()
+        if (!newToken) throw new Error('Refresh failed')
+
         // Retry all queued requests with new token
         refreshSubscribers.forEach(({ resolve, originalRequest: req }) => {
           req.headers['Authorization'] = `Bearer ${accessTokenRef}`
           resolve(api(req))
         })
         refreshSubscribers = []
-        
+
         // Retry original request with new token
         originalRequest.headers['Authorization'] = `Bearer ${accessTokenRef}`
         return api(originalRequest)
@@ -117,7 +135,7 @@ api.interceptors.response.use(
         refreshSubscribers = []
         
         accessTokenRef = null
-        localStorage.removeItem('accessToken')
+        sessionStorage.removeItem('peercode_access_token')
         
         // Redirect to login on refresh failure
         if (typeof window !== 'undefined') {
@@ -148,9 +166,11 @@ export const createRoom = (data) => api.post('/rooms', data)
 export const getRoom = (roomId) => api.get(`/rooms/${roomId}`)
 export const joinRoom = (roomId, data) => api.post(`/rooms/${roomId}/join`, data)
 export const deleteRoom = (roomId) => api.delete(`/rooms/${roomId}`)
+export const createPrivateRoom = (data) => api.post('/rooms/private', data)
+export const joinPrivateRoom = (inviteCode) => api.get(`/rooms/join/${inviteCode}`)
 
 // Problems
-export const getProblems = (params) => api.get('/problems', { params })
+export const getProblems = (params, signal) => api.get('/problems', { params, signal })
 export const getProblem = (slug) => api.get(`/problems/${slug}`)
 export const getProblemStats = () => api.get('/problems/stats')
 export const createProblem = (data) => api.post('/problems', data)
@@ -165,7 +185,9 @@ export const getDebrief = (roomId) => api.get(`/sessions/${roomId}/debrief`)
 export const generateDebrief = (sessionId) => api.post(`/debrief/${sessionId}/generate`)
 export const getAnalytics = (roomId) => api.get(`/sessions/${roomId}/analytics`)
 
-// Solutions
+// Ratings
+export const submitRating = (sessionId, toUserId, score, feedback) => api.post('/ratings', { sessionId, toUserId, score, feedback })
+export const getUserRatings = (userId) => api.get(`/ratings/${userId || 'me'}`)
 export const getSolutions = (problemId, params) => api.get(`/solutions/${problemId}`, { params })
 export const createSolution = (problemId, data) => api.post(`/solutions/${problemId}`, data)
 export const upvoteSolution = (id) => api.put(`/solutions/${id}/upvote`)
@@ -174,7 +196,7 @@ export const upvoteSolution = (id) => api.put(`/solutions/${id}/upvote`)
 export const getProfile = () => api.get('/users/profile')
 export const updateProfile = (data) => api.put('/profile', data)
 export const updateApiKey = (apiKey) => api.put('/users/api-key', { apiKey })
-export const getUserSessions = () => api.get('/sessions')
+export const getUserSessions = (params) => api.get('/sessions', { params })
 export const getUserSolvedProblems = () => api.get('/users/solved-problems')
 export const changePassword = (currentPassword, newPassword, confirmPassword) => api.put('/profile/password', { currentPassword, newPassword, confirmPassword })
 
@@ -183,6 +205,16 @@ export const getHint = (data) => api.post('/gemini/hint', data)
 export const analyzeCode = (data) => api.post('/gemini/analyze', data)
 export const generateQuestion = (data) => api.post('/gemini/question', data)
 export const validateGeminiKey = (apiKey) => api.post('/gemini-key/validate', { apiKey })
+
+// Partner ratings
+export const submitPartnerRating = (data) => api.post('/ratings', data)
+export const getMyRatings = () => api.get('/ratings/me')
+export const getUserRatingsById = (userId) => api.get(`/ratings/${userId}`)
+
+// AI Interview
+export const generateInterviewQuestions = (data) => api.post('/interview/questions', data)
+export const evaluateInterviewAnswer = (data) => api.post('/interview/evaluate', data)
+export const generateInterviewFeedback = (data) => api.post('/interview/feedback', data)
 
 // Execute
 export const executeCode = (data) => api.post('/execute', data)

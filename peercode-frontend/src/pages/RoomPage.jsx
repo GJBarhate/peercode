@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { Helmet } from 'react-helmet-async'
 import toast from 'react-hot-toast'
 import ErrorBoundary from '../components/common/ErrorBoundary'
 import ErrorState from '../components/common/ErrorState'
@@ -13,7 +14,7 @@ import { useYjsEditor } from '../hooks/useYjsEditor'
 import { useRoom } from '../hooks/useRoom'
 import { createRoom, getErrorMessage, joinRoom } from '../services/api'
 import { useAuth } from '../context/AuthContext'
-import { Lightbulb } from 'lucide-react'
+import { Lightbulb, Users } from 'lucide-react'
 
 export default function RoomPage() {
   const { roomId } = useParams()
@@ -174,7 +175,7 @@ export default function RoomPage() {
   }, [])
 
   const { language, setLanguage, bindToMonaco } = useYjsEditor(resolvedRoomId, socket, editorRef, onStuckDetected)
-  const { remoteStreams, peerMediaStates, isScreenSharing, startScreenShare, stopScreenShare, syncLocalStream } = useWebRTC(resolvedRoomId, socket, localStream)
+  const { remoteStreams, peerMediaStates, connectionStates, isScreenSharing, startScreenShare, stopScreenShare, syncLocalStream } = useWebRTC(resolvedRoomId, socket, localStream)
 
   const handleJoin = async ({ role, isMuted, isVideoOff }) => {
     if (!resolvedRoomId) return
@@ -225,6 +226,12 @@ export default function RoomPage() {
             })
           } catch (err3) {
             stream = null
+            const isDenied = err3?.name === 'NotAllowedError' || err2?.name === 'NotAllowedError' || err?.name === 'NotAllowedError'
+            toast.error(isDenied
+              ? 'Microphone/camera access denied. Grant permission in browser settings to use audio & video.'
+              : 'No media devices found. You will join without audio/video.',
+              { duration: 8000 }
+            )
           }
         }
       }
@@ -260,7 +267,7 @@ export default function RoomPage() {
       <ErrorState
         error={roomLoadError}
         title="Failed to Load Room"
-        onRetry={() => window.location.reload()}
+        onRetry={() => navigate(0)}
         onGoHome={() => navigate('/dashboard')}
       />
     )
@@ -279,6 +286,10 @@ export default function RoomPage() {
 
   return (
     <ErrorBoundary>
+      <Helmet>
+        <title>Coding Room | PeerCode</title>
+        <meta name="robots" content="noindex" />
+      </Helmet>
       {phase === 'lobby' ? (
         <RoomLobby
           roomId={resolvedRoomId}
@@ -287,6 +298,23 @@ export default function RoomPage() {
           error={socketError}
         />
       ) : (
+        <>
+        {participants.length < 2 && (
+          <div className="fixed inset-0 z-50 bg-gray-950/80 backdrop-blur-sm flex items-center justify-center pointer-events-none">
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 flex flex-col items-center gap-4 max-w-sm text-center shadow-2xl">
+              <div className="w-14 h-14 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+                <Users className="w-7 h-7 text-indigo-400 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-100">Waiting for peer</h3>
+                <p className="mt-1 text-sm text-gray-400">Share the room link to invite someone</p>
+              </div>
+              <div className="w-full bg-gray-800 rounded-lg px-4 py-2 pointer-events-auto">
+                <p className="text-xs text-gray-400 truncate select-all">{window.location.href}</p>
+              </div>
+            </div>
+          </div>
+        )}
         <RoomLayout
           roomId={resolvedRoomId}
           room={room}
@@ -295,6 +323,7 @@ export default function RoomPage() {
           localStream={localStream}
           remoteStreams={remoteStreams}
           peerMediaStates={peerMediaStates}
+          connectionStates={connectionStates}
           isScreenSharing={isScreenSharing}
           onScreenShare={startScreenShare}
           onStopScreenShare={stopScreenShare}
@@ -306,6 +335,7 @@ export default function RoomPage() {
           onEndCall={handleEndCall}
           isEnding={isEnding}
         />
+        </>
       )}
       {phase === 'room' && <KeyboardShortcutsCheatSheet />}
     </ErrorBoundary>

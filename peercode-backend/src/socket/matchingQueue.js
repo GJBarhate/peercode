@@ -5,12 +5,13 @@ const Room = require('../models/Room');
 const User = require('../models/User');
 const MatchingQueue = require('../models/MatchingQueue');
 const logger = require('../utils/logger');
+const { DEFAULT_ELO } = require('../constants/elo.constants');
 
 module.exports = async function (io) {
   const queue = new Map();
   const userSockets = new Map(); // Track user socket IDs for duplicate prevention
   const timeoutTimers = new Map(); // Server-side 60s timeout per user
-  const QUEUE_TIMEOUT_MS = 60000;
+  const QUEUE_TIMEOUT_MS = parseInt(process.env.MATCH_TIMEOUT_MS, 10) || 60000;
   let queueSequence = 0; // Incrementing counter for O(1) position calculation
 
   function removeFromQueue(userId) {
@@ -32,6 +33,7 @@ module.exports = async function (io) {
     const timer = setTimeout(async () => {
       if (queue.has(userId)) {
         const entry = queue.get(userId);
+        const targetSocketId = userSockets.get(userId);
         logger.info(`⏰ Queue timeout for ${entry?.username || userId}`);
         removeFromQueue(userId);
         try {
@@ -39,20 +41,12 @@ module.exports = async function (io) {
         } catch (err) {
           logger.error('Error removing timed-out user from MongoDB:', err.message);
         }
-        io.to(userSockets.get(userId) || '').emit('queue-timeout', { message: 'Match not found within 60 seconds' });
+        if (targetSocketId) {
+          io.to(targetSocketId).emit('queue-timeout', { message: 'Match not found within 60 seconds' });
+        }
       }
     }, QUEUE_TIMEOUT_MS);
     timeoutTimers.set(userId, timer);
-  }
-
-  // Restore queue from MongoDB on startup (without timers — stale entries will be cleaned)
-  try {
-    const queuedUsers = await MatchingQueue.find({});
-    logger.info(`Restoring ${queuedUsers.length} users from matching queue — will be pruned on next interaction`);
-    // Remove stale entries restored from DB (they have no active socket)
-    await MatchingQueue.deleteMany({});
-  } catch (err) {
-    logger.error('Error restoring queue from MongoDB:', err.message);
   }
 
   function findMatch(candidate) {
@@ -115,7 +109,7 @@ module.exports = async function (io) {
         const candidate = {
           userId: socket.data.userId,
           username: socket.data.username,
-          elo: socket.data.elo || 1200,
+          elo: socket.data.elo || DEFAULT_ELO,
           preferredRole: role || 'interviewee',
           preferredTopic: topic || 'any',
           socketId: socket.id,
@@ -196,9 +190,16 @@ module.exports = async function (io) {
               maxParticipants: 2,
             });
 
-            // Join both sockets to room
+            // Join both sockets to room — verify partner socket still exists first
             socket.join(roomId);
-            io.to(match.socketId).socketsJoin(roomId);
+            const partnerSockets = await io.in(match.socketId).fetchSockets();
+            if (!partnerSockets.length) {
+              logger.warn(`Partner socket ${match.socketId} disconnected before match; requeueing ${candidate.username}`);
+              removeFromQueue(candidate.userId);
+              socket.emit('queue-error', { message: 'Your match disconnected. Please rejoin the queue.' });
+              return;
+            }
+            io.in(match.socketId).socketsJoin(roomId);
 
             // Emit match events with all required details
             socket.emit('queue-matched', {

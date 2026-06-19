@@ -5,6 +5,8 @@ const Session = require('../models/Session');
 const Problem = require('../models/Problem');
 const ProblemReport = require('../models/ProblemReport');
 const Room = require('../models/Room');
+const Rating = require('../models/Rating');
+const AiDebrief = require('../models/AiDebrief');
 const { getKeyPoolStatus } = require('../config/gemini');
 const { fail } = require('../utils/httpResponse');
 
@@ -12,7 +14,7 @@ async function getStats(req, res) {
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  const [totalUsers, totalSessions, totalProblems, activeRooms, subsAgg] = await Promise.all([
+  const [totalUsers, totalSessions, totalProblems, activeRooms, subsAgg, totalInterviews, totalCollabSessions, ratingAgg, totalRatings] = await Promise.all([
     User.countDocuments(),
     Session.countDocuments(),
     Problem.countDocuments({ isActive: true }),
@@ -21,6 +23,10 @@ async function getStats(req, res) {
       { $match: { 'subscription.plan': { $ne: 'free' }, 'subscription.status': { $in: ['active', 'past_due'] } } },
       { $group: { _id: '$subscription.plan', count: { $sum: 1 } } }
     ]),
+    AiDebrief.countDocuments().catch(() => 0),
+    Session.countDocuments({ $expr: { $gt: [{ $size: { $ifNull: ['$participants', []] } }, 1] } }).catch(() => 0),
+    Rating.aggregate([{ $group: { _id: null, avg: { $avg: '$score' } } }]).catch(() => []),
+    Rating.countDocuments().catch(() => 0),
   ]);
 
   const subscriptionStats = {
@@ -69,6 +75,10 @@ async function getStats(req, res) {
     activeTodayCount,
     sessionsPerDay,
     topProblems,
+    totalInterviews,
+    totalCollabSessions,
+    totalRatings,
+    avgRating: ratingAgg?.[0]?.avg ? Math.round(ratingAgg[0].avg * 10) / 10 : 0,
     geminiPool: getKeyPoolStatus(),
     subscriptionStats,
   });
@@ -78,13 +88,14 @@ async function getUsers(req, res) {
   const { page = 1, limit = 20, search } = req.query;
   const filter = {};
   if (search) {
+    const escaped = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     filter.$or = [
-      { username: { $regex: search, $options: 'i' } },
-      { email: { $regex: search, $options: 'i' } },
+      { username: { $regex: escaped, $options: 'i' } },
+      { email: { $regex: escaped, $options: 'i' } },
     ];
   }
 
-  const skip = (parseInt(page) - 1) * parseInt(limit);
+  const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
   const [users, total] = await Promise.all([
     User.find(filter)
       .select('-passwordHash')
@@ -112,8 +123,19 @@ async function getProblems(req, res) {
   res.json(problems);
 }
 
+const PROBLEM_ALLOWED_FIELDS = [
+  'title', 'slug', 'description', 'difficulty', 'companies', 'examples',
+  'hiddenTests', 'tags', 'constraints', 'timeLimit', 'memoryLimit',
+  'isActive', 'stubs', 'testCases', 'starterCode', 'codeTemplates',
+  'testHarness', 'hints', 'editorial', 'solutions',
+];
+
 async function updateProblem(req, res) {
-  const problem = await Problem.findByIdAndUpdate(req.params.id, req.body, {
+  const picked = {};
+  for (const key of PROBLEM_ALLOWED_FIELDS) {
+    if (req.body[key] !== undefined) picked[key] = req.body[key];
+  }
+  const problem = await Problem.findByIdAndUpdate(req.params.id, picked, {
     new: true,
     runValidators: true,
   });

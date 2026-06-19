@@ -1,18 +1,6 @@
 'use strict';
 
-const PLAN_LIMITS = {
-  free: { hints: 30, analyzes: 30 },
-  pro: { hints: 70, analyzes: 70 },
-  premium: { hints: 180, analyzes: 180 },
-  ultra: { hints: Infinity, analyzes: Infinity }
-};
-
-const PLAN_PRICES = {
-  free: 0,
-  pro: 99,
-  premium: 299,
-  ultra: 999
-};
+const { PLAN_LIMITS, PLAN_PRICES } = require('../constants/plans.constants');
 
 function getPlanLimits(plan) {
   return PLAN_LIMITS[plan] || PLAN_LIMITS.free;
@@ -26,12 +14,22 @@ function canUseFeature(user, feature) {
   const plan = user.subscription?.plan || 'free';
   const limits = getPlanLimits(plan);
   const usage = user.usage || { hintsUsed: 0, analyzesUsed: 0 };
-  
+
   if (limits[feature] === Infinity) return { allowed: true, remaining: Infinity };
-  
+
+  // Reset counters if a new monthly period has started
+  const now = new Date();
+  const periodStart = usage.periodStart ? new Date(usage.periodStart) : now;
+  const monthDiff = (now.getFullYear() - periodStart.getFullYear()) * 12 + (now.getMonth() - periodStart.getMonth());
+  if (monthDiff >= 1) {
+    usage.hintsUsed = 0;
+    usage.analyzesUsed = 0;
+    usage.periodStart = now;
+  }
+
   const used = feature === 'hints' ? usage.hintsUsed : usage.analyzesUsed;
   const remaining = Math.max(0, limits[feature] - used);
-  
+
   return { allowed: used < limits[feature], remaining, limit: limits[feature], used };
 }
 

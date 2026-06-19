@@ -1,18 +1,44 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import axios from 'axios'
-import { API_BASE_URL, setAccessToken as setApiToken, setTokenRefreshHandler } from '../services/api'
+import { API_BASE_URL, setAccessToken as setApiToken, setTokenRefreshHandler, refreshAccessToken } from '../services/api'
 import { logger } from '../utils/logger'
 
 const AuthContext = createContext(null)
+
+function parseJwtExp(token) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    return payload.exp ? payload.exp * 1000 : null
+  } catch { return null }
+}
+
+function isTokenExpired(token) {
+  const exp = parseJwtExp(token)
+  if (!exp) return true
+  return Date.now() >= exp
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [accessToken, setAccessTokenState] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [showExpiryWarning, setShowExpiryWarning] = useState(false)
+  const expiryTimerRef = useRef(null)
 
   const setAccessToken = useCallback((token) => {
     setAccessTokenState(token)
     setApiToken(token)
+    // Schedule session expiry warning at T-5min
+    if (expiryTimerRef.current) clearTimeout(expiryTimerRef.current)
+    if (token) {
+      const exp = parseJwtExp(token)
+      if (exp) {
+        const warnAt = exp - Date.now() - 5 * 60 * 1000
+        if (warnAt > 0) {
+          expiryTimerRef.current = setTimeout(() => setShowExpiryWarning(true), warnAt)
+        }
+      }
+    }
   }, [])
 
   const clearAllSessions = useCallback(() => {
@@ -54,21 +80,27 @@ export function AuthProvider({ children }) {
     }
   }, [setAccessToken, clearAllSessions])
 
+  const refreshPromiseRef = useRef(null)
+
   const refreshToken = useCallback(async () => {
-    try {
-      const { data } = await axios.post(
-        `${API_BASE_URL}/auth/refresh`,
-        {},
-        { withCredentials: true }
-      )
-      setAccessToken(data.accessToken)
-      setUser(data.user)
-      return data.accessToken
-    } catch (_) {
-      setUser(null)
-      setAccessToken(null)
-      return null
-    }
+    if (refreshPromiseRef.current) return refreshPromiseRef.current
+
+    const promise = (async () => {
+      try {
+        const token = await refreshAccessToken()
+        if (!token) throw new Error('Refresh failed')
+        return token
+      } catch (_) {
+        setUser(null)
+        setAccessToken(null)
+        return null
+      }
+    })()
+
+    refreshPromiseRef.current = promise
+    const result = await promise
+    refreshPromiseRef.current = null
+    return result
   }, [setAccessToken])
 
   useEffect(() => {
@@ -84,58 +116,56 @@ export function AuthProvider({ children }) {
 
     async function init() {
       try {
-        // Check if we have a stored access token from sessionStorage
         const storedToken = (() => { try { return sessionStorage.getItem('peercode_access_token'); } catch(_) { return null; } })();
-        
-        if (storedToken) {
-          // Token exists — set it and try a lightweight verify instead of full refresh
+
+        if (storedToken && !isTokenExpired(storedToken)) {
           setAccessToken(storedToken)
-          
-          // Try to use the stored token immediately, refresh in background
+
           try {
-            const response = await axios.post(
-              `${API_BASE_URL}/auth/refresh`,
-              {},
+            const { data } = await axios.get(
+              `${API_BASE_URL}/users/profile`,
               {
+                headers: { Authorization: `Bearer ${storedToken}` },
                 withCredentials: true,
-                timeout: 3000
+                timeout: 5000,
               }
             )
             if (mounted) {
-              setAccessToken(response.data.accessToken)
-              setUser(response.data.user)
+              const userData = data?.data || data?.user || data
+              setUser(userData)
             }
-          } catch (_) {
-            // Refresh failed — token might still be valid for a while
-            // User will get 401 on next API call and interceptor will refresh
-            if (mounted) {
-              // Don't clear user — token might still work
-              // Only clear if we got a 401
-              if (_.response?.status === 401) {
-                setUser(null)
-                setAccessToken(null)
-              }
+          } catch (profileErr) {
+            if (mounted && profileErr.response?.status === 401) {
+              setUser(null)
+              setAccessToken(null)
             }
           }
         } else {
-          // No stored token — try to refresh using cookie
           try {
-            const response = await axios.post(
-              `${API_BASE_URL}/auth/refresh`,
-              {},
-              {
-                withCredentials: true,
-                timeout: 5000
+            const token = await refreshAccessToken()
+            if (mounted && token) {
+              const { data } = await axios.get(
+                `${API_BASE_URL}/users/profile`,
+                {
+                  headers: { Authorization: `Bearer ${token}` },
+                  withCredentials: true,
+                  timeout: 5000,
+                }
+              )
+              if (mounted) {
+                setAccessToken(token)
+                const userData = data?.data || data?.user || data
+                setUser(userData)
               }
-            )
-            if (mounted) {
-              setAccessToken(response.data.accessToken)
-              setUser(response.data.user)
+            } else if (mounted) {
+              setUser(null)
+              setAccessToken(null)
             }
           } catch (refreshErr) {
             logger.warn('Token refresh failed during init:', refreshErr.message)
             if (mounted) {
               setUser(null)
+              setAccessToken(null)
             }
           }
         }
@@ -231,8 +261,18 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
+  const renewSession = useCallback(async () => {
+    setShowExpiryWarning(false)
+    await refreshToken()
+  }, [refreshToken])
+
+  const dismissExpiryAndLogout = useCallback(async () => {
+    setShowExpiryWarning(false)
+    await logout()
+  }, [logout])
+
   return (
-    <AuthContext.Provider value={{ user, setUser, accessToken, setAccessToken, isLoading, login, register, logout, refreshToken, verifyOTP, resendOTP }}>
+    <AuthContext.Provider value={{ user, setUser, accessToken, setAccessToken, isLoading, login, register, logout, refreshToken, verifyOTP, resendOTP, showExpiryWarning, renewSession, dismissExpiryAndLogout }}>
       {children}
     </AuthContext.Provider>
   )

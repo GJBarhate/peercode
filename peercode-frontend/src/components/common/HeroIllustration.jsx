@@ -1,6 +1,6 @@
 export default function HeroIllustration() {
   return (
-    <svg viewBox="0 0 400 320" className="w-full max-w-md mx-auto" fill="none">
+    <svg viewBox="0 0 400 320" className="w-full max-w-md mx-auto animate-float" fill="none">
       <rect x="60" y="100" width="280" height="160" rx="12" className="fill-gray-800 stroke-gray-700" strokeWidth="2" />
       <rect x="60" y="100" width="280" height="28" rx="12" className="fill-gray-800" />
       <rect x="60" y="114" width="280" height="14" className="fill-gray-800" />

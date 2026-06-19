@@ -12,25 +12,11 @@ export default function ShareRoomModal({ isOpen, onClose, roomId }) {
 
   const handleCopyLink = async () => {
     try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(shareUrl)
-        setCopied(true)
-        toast.success('Link copied to clipboard!')
-        setTimeout(() => setCopied(false), 2000)
-      } else {
-        // Fallback for older browsers
-        const textarea = document.createElement('textarea')
-        textarea.value = shareUrl
-        document.body.appendChild(textarea)
-        textarea.select()
-        document.execCommand('copy')
-        document.body.removeChild(textarea)
-        setCopied(true)
-        toast.success('Link copied to clipboard!')
-        setTimeout(() => setCopied(false), 2000)
-      }
-    } catch (err) {
-      console.error('Copy failed:', err)
+      await navigator.clipboard.writeText(shareUrl)
+      setCopied(true)
+      toast.success('Link copied to clipboard!')
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
       toast.error('Failed to copy link')
     }
   }
@@ -45,7 +31,6 @@ export default function ShareRoomModal({ isOpen, onClose, roomId }) {
         })
       } catch (err) {
         if (err.name !== 'AbortError') {
-          console.error('Share failed:', err)
           toast.error('Failed to share')
         }
       }

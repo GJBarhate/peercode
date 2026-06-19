@@ -8,7 +8,6 @@ const RoomSchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
-      index: true,
     },
     host: {
       type: mongoose.Schema.Types.ObjectId,
@@ -39,8 +38,21 @@ const RoomSchema = new mongoose.Schema(
       default: 3,
       max: 10,
     },
+    inviteCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
+    isPrivate: { type: Boolean, default: false },
+    isRanked: { type: Boolean, default: true },
+    customTimeLimit: { type: Number },
+    isPublic: { type: Boolean, default: true },
+    spectatorCount: { type: Number, default: 0 },
   },
   { timestamps: true }
 );
+
+// Auto-expire orphaned rooms after 24 hours
+RoomSchema.index({ createdAt: 1 }, { expireAfterSeconds: 86400 });
 
 module.exports = mongoose.model('Room', RoomSchema);

@@ -1,8 +1,20 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { HelpCircle, X } from 'lucide-react'
 
 export default function KeyboardShortcutsCheatSheet() {
   const [isOpen, setIsOpen] = useState(false)
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey &&
+          !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) {
+        e.preventDefault()
+        setIsOpen(v => !v)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   const shortcuts = [
     { keys: ['Ctrl', 'Enter'], action: 'Run tests' },

@@ -13,8 +13,10 @@
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@socket.io/redis-adapter": "^8.3.0",
     "agenda": "5.0.0",
     "axios": "^1.17.0",
+    "ioredis": "^5.3.2",
     "bcryptjs": "2.4.3",
     "compression": "1.7.4",
     "cookie-parser": "1.4.6",
@@ -24,8 +26,10 @@
     "express-async-errors": "3.1.1",
     "express-mongo-sanitize": "2.2.0",
     "express-rate-limit": "7.1.0",
+    "rate-limit-redis": "^4.2.0",
     "google-auth-library": "^9.15.1",
     "helmet": "7.1.0",
+    "joi": "^18.2.3",
     "jsonwebtoken": "9.0.0",
     "mongoose": "8.0.0",
     "morgan": "1.10.0",
@@ -37,8 +41,14 @@
   },
   "devDependencies": {
     "jest": "29.0.0",
+    "lint-staged": "^15.2.0",
     "nodemon": "3.0.0",
+    "prettier": "^3.3.0",
     "supertest": "6.3.3"
+  },
+  "lint-staged": {
+    "src/**/*.js": ["prettier --write"],
+    "*.js": ["prettier --write"]
   },
   "jest": {
     "testEnvironment": "node",

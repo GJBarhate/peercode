@@ -91,7 +91,6 @@ export default function SubscriptionModal({ isOpen, onClose, plan, orderData, on
         })
         rzp.open()
       } catch (err) {
-        console.error('Razorpay checkout error:', err)
         setStep('error')
         setErrorMsg(err.message || 'Failed to open payment window')
       }
@@ -104,7 +103,7 @@ export default function SubscriptionModal({ isOpen, onClose, plan, orderData, on
         try { razorpayRef.current.close() } catch (_) {}
       }
     }
-  }, [isOpen])
+  }, [isOpen, orderData, plan, onClose])
 
   if (!isOpen) return null
 

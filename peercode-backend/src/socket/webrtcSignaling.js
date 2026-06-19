@@ -117,14 +117,23 @@ module.exports = function (io) {
     });
 
     socket.on('offer', ({ to, sdp }) => {
+      if (!socket.currentRoom) return;
+      const roomSockets = io.sockets.adapter.rooms.get(socket.currentRoom);
+      if (!roomSockets || !roomSockets.has(to)) return;
       io.to(to).emit('offer', { from: socket.id, sdp });
     });
 
     socket.on('answer', ({ to, sdp }) => {
+      if (!socket.currentRoom) return;
+      const roomSockets = io.sockets.adapter.rooms.get(socket.currentRoom);
+      if (!roomSockets || !roomSockets.has(to)) return;
       io.to(to).emit('answer', { from: socket.id, sdp });
     });
 
     socket.on('ice-candidate', ({ to, candidate }) => {
+      if (!socket.currentRoom) return;
+      const roomSockets = io.sockets.adapter.rooms.get(socket.currentRoom);
+      if (!roomSockets || !roomSockets.has(to)) return;
       io.to(to).emit('ice-candidate', { from: socket.id, candidate });
     });
 
@@ -152,11 +161,21 @@ module.exports = function (io) {
       })
     });
 
-    socket.on('leave-room', (roomId) => {
+    socket.on('leave-room', async (roomId) => {
       socket.leave(roomId);
       if (socket.currentRoom === roomId) {
         socket.currentRoom = null;
       }
+
+      try {
+        await Room.findOneAndUpdate(
+          { roomId },
+          { $pull: { participants: { user: socket.user?.id } } }
+        );
+      } catch (err) {
+        logger.error(`Failed to remove participant on leave-room ${roomId}:`, err.message);
+      }
+
       io.to(roomId).emit('participant-left', {
         socketId: socket.id,
         username: socket.user.username,
@@ -200,10 +219,19 @@ module.exports = function (io) {
       logger.error(`Socket error for user ${socket.user?.id}:`, error);
     });
 
-    socket.on('kick-participant', (data) => {
+    socket.on('kick-participant', async (data) => {
       try {
         const { participantSocketId, reason } = data || {};
-        if (!participantSocketId) return;
+        if (!participantSocketId || !socket.currentRoom) return;
+
+        const dbRoom = await Room.findOne({ roomId: socket.currentRoom }).lean();
+        const isHost = dbRoom && dbRoom.host?.toString() === socket.user?.id?.toString();
+        const isInterviewer = dbRoom?.participants?.some(
+          p => p.user?.toString() === socket.user?.id?.toString() && p.role === 'interviewer'
+        );
+        if (!isHost && !isInterviewer) {
+          return socket.emit('error', { message: 'Only the host or interviewer can kick participants' });
+        }
 
         io.to(participantSocketId).emit('participant-kicked', {
           message: reason || 'You were removed from the session',

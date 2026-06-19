@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { ExternalLink, Users, Building2 } from 'lucide-react'
 import Badge from '../common/Badge'
@@ -9,13 +9,14 @@ export default function ProblemList({ filters = {}, onPractice }) {
   const [problems, setProblems] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+  const stableFilters = useMemo(() => JSON.stringify(filters), [filters])
 
   useEffect(() => {
     async function load() {
       setIsLoading(true)
       setError(null)
       try {
-        const { data } = await getProblems(filters)
+        const { data } = await getProblems(JSON.parse(stableFilters))
         setProblems(data.problems || data || [])
       } catch (err) {
         setError(err.response?.data?.message || 'Failed to load problems')
@@ -24,7 +25,7 @@ export default function ProblemList({ filters = {}, onPractice }) {
       }
     }
     load()
-  }, [JSON.stringify(filters)])
+  }, [stableFilters])
 
   if (isLoading) {
     return (
@@ -49,7 +50,7 @@ export default function ProblemList({ filters = {}, onPractice }) {
       <div className="text-center py-16">
         <p className="text-red-400 mb-4">{error}</p>
         <button
-          onClick={() => window.location.reload()}
+          onClick={() => setError(null)}
           className="btn-secondary text-sm"
         >
           Retry

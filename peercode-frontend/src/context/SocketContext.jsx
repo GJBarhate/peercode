@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useRef } from 'react'
 import { createSocket, disconnectSocket } from '../services/socketService'
+import { refreshAccessToken, getAccessToken } from '../services/api'
 import { useAuth } from './AuthContext'
 import { logger } from '../utils/logger'
 
@@ -13,6 +14,7 @@ export function SocketProvider({ children }) {
   const reconnectTimeoutRef = useRef(null)
   const connectionAttemptRef = useRef(0)
   const previousSocketIdRef = useRef(null)
+  const prevTokenRef = useRef(null)
 
   useEffect(() => {
     if (authLoading) {
@@ -32,13 +34,14 @@ export function SocketProvider({ children }) {
     }
 
     // If socket exists but token changed, disconnect and reconnect to re-authenticate
-    if (socketRef.current && socketRef.current.auth?.token !== accessToken) {
+    if (socketRef.current && prevTokenRef.current !== accessToken) {
       logger.debug('Token changed - disconnecting socket to re-authenticate')
       disconnectSocket()
       socketRef.current = null
       setSocket(null)
       setIsConnected(false)
     }
+    prevTokenRef.current = accessToken
 
     if (socketRef.current?.connected) {
       return
@@ -83,6 +86,16 @@ export function SocketProvider({ children }) {
       logger.error('Socket connection error:', err)
       connectionAttemptRef.current += 1
       setIsConnected(false)
+      if (err.message?.includes('Authentication') || err.message?.includes('Invalid token')) {
+        logger.debug('Auth error on socket — refreshing token')
+        refreshAccessToken().then(() => {
+          const newToken = getAccessToken()
+          if (newToken && socketRef.current) {
+            socketRef.current.auth = { token: newToken }
+            socketRef.current.disconnect().connect()
+          }
+        })
+      }
     }
 
     const handleReconnect = () => {

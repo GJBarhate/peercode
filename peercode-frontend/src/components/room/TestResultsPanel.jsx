@@ -22,7 +22,7 @@ export default function TestResultsPanel({ results, isLoading }) {
         <div className="w-full h-2 bg-gray-700 rounded-full overflow-hidden">
           <div
             className={`h-full transition-all ${passedCount === totalCount ? 'bg-green-500' : 'bg-red-500'}`}
-            style={{ width: `${(passedCount / totalCount) * 100}%` }}
+            style={{ width: `${totalCount > 0 ? (passedCount / totalCount) * 100 : 0}%` }}
           />
         </div>
       </div>

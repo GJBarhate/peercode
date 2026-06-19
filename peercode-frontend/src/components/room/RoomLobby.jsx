@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Crown, User, Video, VideoOff, Mic, MicOff, ArrowRight, Link as LinkIcon, Check, Share2 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import Spinner from '../common/Spinner'
 import ShareRoomModal from './ShareRoomModal'
 
@@ -55,42 +56,13 @@ export default function RoomLobby({ roomId, onJoin, isLoading, error = null }) {
 
   const copyRoomLink = async () => {
     try {
-      // Use window.location.origin for production, fallback to full URL construction
-      const baseUrl = window.location.origin || `${window.location.protocol}//${window.location.host}`
+      const baseUrl = window.location.origin
       const shareUrl = `${baseUrl}/room/${roomId}`
-      
-      // Try clipboard API first
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareUrl)
-        setLinkCopied(true)
-        setTimeout(() => setLinkCopied(false), 2000)
-        return
-      }
-      
-      // Fallback: copy to temporary element
-      const textarea = document.createElement('textarea')
-      textarea.value = shareUrl
-      textarea.style.position = 'fixed'
-      textarea.style.left = '0'
-      textarea.style.top = '0'
-      document.body.appendChild(textarea)
-      textarea.focus()
-      textarea.select()
-      const success = document.execCommand('copy')
-      document.body.removeChild(textarea)
-      
-      if (success) {
-        setLinkCopied(true)
-        setTimeout(() => setLinkCopied(false), 2000)
-      } else {
-        throw new Error('Copy failed')
-      }
-    } catch (err) {
-      console.error('Failed to copy:', err)
-      // Show alert with the URL
-      const baseUrl = window.location.origin || `${window.location.protocol}//${window.location.host}`
-      const shareUrl = `${baseUrl}/room/${roomId}`
-      alert(`Share this link:\n\n${shareUrl}`)
+      await navigator.clipboard.writeText(shareUrl)
+      setLinkCopied(true)
+      setTimeout(() => setLinkCopied(false), 2000)
+    } catch {
+      toast.error('Failed to copy link — copy it manually from the address bar')
     }
   }
 

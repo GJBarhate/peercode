@@ -35,10 +35,7 @@ export default function GeminiKeyManager() {
     if (!k) { toast.error('Please enter an API key'); return }
     setValidating(true)
     try {
-      const res = await validateGeminiKey(k)
-      if (res.status !== 200) {
-        return
-      }
+      await validateGeminiKey(k)
       await updateApiKey(k)
       setUserApiKey(k)
       toast.success('API key saved')

@@ -6,8 +6,8 @@ const { fail } = require('../utils/httpResponse');
 
 async function getSolutions(req, res) {
   const { problemId } = req.params;
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 20;
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 20;
 
   const problem = await Problem.findById(problemId);
   if (!problem) return fail(res, 404, 'Problem not found');

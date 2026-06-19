@@ -15,8 +15,14 @@ async function start() {
   try {
     await connectDB();
 
-    // Run migrations
-    await migrateSessionProblemSnapshots();
+    // Run migrations with a ledger guard to prevent duplicate runs on multi-instance deployments
+    const mongoose = require('mongoose');
+    const db = mongoose.connection.db;
+    const alreadyRan = await db.collection('migrations').findOne({ name: 'sessionSnapshotMigration' }).catch(() => null);
+    if (!alreadyRan) {
+      await migrateSessionProblemSnapshots();
+      await db.collection('migrations').insertOne({ name: 'sessionSnapshotMigration', ranAt: new Date() }).catch(() => {});
+    }
 
     const httpServer = http.createServer(app);
 

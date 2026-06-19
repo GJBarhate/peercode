@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { Helmet } from 'react-helmet-async'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, CheckCircle2, Circle, Clock, BookOpen, Users, Trophy, Search, BarChart3, Sparkles, Target, ChevronRight } from 'lucide-react'
 import Navbar from '../components/common/Navbar'
@@ -62,7 +63,7 @@ export default function TrackDetailPage() {
   }
 
   const problems = track?.problems || []
-  const completedIds = new Set(progress?.completedProblems || [])
+  const completedIds = new Set(Array.isArray(progress?.completedProblems) ? progress.completedProblems : [])
   const completedCount = completedIds.size
   const total = problems.length
   const pct = total > 0 ? (completedCount / total) * 100 : 0
@@ -111,6 +112,10 @@ export default function TrackDetailPage() {
 
   return (
     <div className="min-h-screen bg-gray-950">
+      <Helmet>
+        <title>{track?.name || 'Track'} | PeerCode</title>
+        <meta name="description" content="Complete coding problems in this company track" />
+      </Helmet>
       <Navbar />
       <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-24 pb-16">
         <Link to="/tracks" className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-300 transition-colors mb-6 group">
@@ -212,12 +217,16 @@ export default function TrackDetailPage() {
             return (
               <div
                 key={problem._id || problem.slug || i}
+                role="button"
+                tabIndex={0}
+                aria-label={`${done ? 'Solved: ' : ''}${problem.title} — ${problem.difficulty || 'unknown'} difficulty`}
                 className={`group relative overflow-hidden rounded-xl border p-4 flex items-center gap-3 sm:gap-4 transition-all duration-200 cursor-pointer hover:scale-[1.01] ${
                   done
                     ? 'bg-emerald-900/10 border-emerald-800/30 hover:border-emerald-600/50'
                     : 'bg-gray-900/50 border-gray-800 hover:border-indigo-500/40 hover:bg-gray-900'
                 }`}
                 onClick={() => handleSolveProblem(problem)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSolveProblem(problem) } }}
               >
                 <div className={`flex items-center justify-center w-9 h-9 rounded-full text-sm font-bold flex-shrink-0 transition-all ${
                   done ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-800 text-gray-500 group-hover:bg-indigo-600/20 group-hover:text-indigo-400'

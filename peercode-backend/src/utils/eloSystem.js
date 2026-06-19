@@ -1,12 +1,29 @@
 'use strict';
 
+const {
+  K_FACTOR,
+  ELO_DIVISOR,
+  ELO_FLOOR,
+  DELTA,
+  FAST_SOLVE_THRESHOLD,
+  MIN_CODE_LENGTH,
+} = require('../constants/elo.constants');
+
 /**
- * Calculate ELO delta based on problem difficulty and performance
- * 
- * Base: Easy solved=+8, Easy failed=-2, Medium solved=+15, Medium failed=-5,
- *       Hard solved=+25, Hard failed=-10
- * Bonus: if duration < 60% of time limit: +5. If all test cases pass: +3.
- * Penalty: if no code written (< 50 chars): -3.
+ * Classic ELO update for head-to-head results.
+ * scoreA / scoreB in [0,1] — typically 1=win, 0=loss, 0.5=draw, or normalized rating.
+ */
+function eloCalculator(ratingA, ratingB, scoreA, scoreB) {
+  const expectedA = 1 / (1 + Math.pow(10, (ratingB - ratingA) / ELO_DIVISOR));
+  const newEloA = Math.round(ratingA + K_FACTOR * (scoreA - expectedA));
+  const newEloB = Math.round(ratingB + K_FACTOR * (scoreB - (1 - expectedA)));
+  return { newEloA, newEloB };
+}
+
+/**
+ * Calculate ELO delta based on problem difficulty and performance.
+ * Note: all-tests bonus only applies when `solved` is true to prevent
+ * gaming via visible-tests-only passes.
  */
 function calculateEloDelta(params) {
   const {
@@ -16,45 +33,31 @@ function calculateEloDelta(params) {
     timeLimit,
     testsPassed,
     totalTests,
-    codeLength
+    codeLength,
   } = params;
 
   let delta = 0;
 
-  // Base score
-  if (difficulty === 'easy') {
-    delta = solved ? 8 : -2;
-  } else if (difficulty === 'medium') {
-    delta = solved ? 15 : -5;
-  } else if (difficulty === 'hard') {
-    delta = solved ? 25 : -10;
+  const tier = DELTA[(difficulty || '').toUpperCase()];
+  if (tier) delta = solved ? tier.WIN : tier.LOSS;
+
+  if (solved && duration && timeLimit && duration < timeLimit * FAST_SOLVE_THRESHOLD) {
+    delta += DELTA.SPEED_BONUS;
   }
 
-  // Bonus: fast solve (< 60% of time limit)
-  if (solved && duration && timeLimit && duration < timeLimit * 0.6) {
-    delta += 5;
+  if (solved && testsPassed === totalTests && totalTests > 0) {
+    delta += DELTA.ALL_TESTS_BONUS;
   }
 
-  // Bonus: all test cases pass
-  if (testsPassed === totalTests && totalTests > 0) {
-    delta += 3;
-  }
-
-  // Penalty: no code written (< 50 chars)
-  if (!codeLength || codeLength < 50) {
-    delta -= 3;
+  if (!codeLength || codeLength < MIN_CODE_LENGTH) {
+    delta -= DELTA.NO_CODE_PENALTY;
   }
 
   return delta;
 }
 
-/**
- * Update user ELO rating
- * Returns updated ELO rating (min: 800, no cap)
- */
 function updateEloRating(currentElo, delta) {
-  const newElo = Math.max(800, currentElo + delta);
-  return newElo;
+  return Math.max(ELO_FLOOR, currentElo + delta);
 }
 
-module.exports = { calculateEloDelta, updateEloRating };
+module.exports = { eloCalculator, calculateEloDelta, updateEloRating };

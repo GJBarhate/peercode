@@ -72,17 +72,19 @@ Please provide a detailed and helpful hint that guides them toward the solution 
 Be thorough and helpful - provide multiple paragraphs if needed to give real value.`;
 
   try {
-    const { result: hint, unlimited } = await checkUsageAndCall(req, res, 'hints', promptBuilder);
+    const outcome = await checkUsageAndCall(req, res, 'hints', promptBuilder);
+    if (!outcome) return; // response already sent (rate-limit / auth failure)
+    const { result: hint, unlimited } = outcome;
     const usageInfo = getUsageInfo(req.user);
     res.json({ hint, usage: usageInfo, unlimited });
   } catch (err) {
     if (err._rateLimit) {
-      return fail(res, 429, 'Rate limit exceeded. Please wait before trying again.');
+      return fail(res, 429, 'Gemini quota exceeded. Use your own API key in Settings > Gemini Key, or wait for quota to reset.');
     }
     if (err._keyError) {
-      return fail(res, 502, 'AI service key error. Please check your API key or try again later.');
+      return fail(res, 502, 'Gemini API key invalid. Go to https://aistudio.google.com/apikey to get a valid key, or add your own key in Settings > Gemini Key.');
     }
-    fail(res, 502, 'Failed to get hint. Please try again.');
+    return fail(res, 502, 'Failed to get hint. Please try again.');
   }
 }
 
@@ -91,6 +93,9 @@ async function analyzeCode(req, res) {
 
   if (!code) {
     return fail(res, 400, 'code is required');
+  }
+  if (code.length > 10_000) {
+    return fail(res, 400, 'Code exceeds 10KB limit for analysis');
   }
 
   const promptBuilder = (body) => `You are an expert software engineer and code reviewer. A candidate is solving the following problem:
@@ -117,7 +122,9 @@ ${body.code}
 Be thorough and helpful. Explain WHY each issue matters and HOW to fix it.`;
 
   try {
-    const { result: analysis, unlimited } = await checkUsageAndCall(req, res, 'analyzes', promptBuilder);
+    const outcome = await checkUsageAndCall(req, res, 'analyzes', promptBuilder);
+    if (!outcome) return; // response already sent
+    const { result: analysis, unlimited } = outcome;
     
     const sections = {
       timeComplexity: '',
@@ -136,12 +143,12 @@ Be thorough and helpful. Explain WHY each issue matters and HOW to fix it.`;
     res.json({ ...sections, usage: usageInfo, unlimited });
   } catch (err) {
     if (err._rateLimit) {
-      return fail(res, 429, 'Rate limit exceeded. Please wait before trying again.');
+      return fail(res, 429, 'Gemini quota exceeded. Use your own API key in Settings > Gemini Key, or wait for quota to reset.');
     }
     if (err._keyError) {
-      return fail(res, 502, 'AI service key error. Please check your API key or try again later.');
+      return fail(res, 502, 'Gemini API key invalid. Go to https://aistudio.google.com/apikey to get a valid key, or add your own key in Settings > Gemini Key.');
     }
-    fail(res, 502, 'Failed to analyze code. Please try again.');
+    return fail(res, 502, 'Failed to analyze code. Please try again.');
   }
 }
 
@@ -159,7 +166,7 @@ async function generateQuestion(req, res) {
   const useOwnKey = !!userApiKey;
 
   if (!useOwnKey) {
-    const check = canUseFeature(user, 'hints');
+    const check = canUseFeature(user, 'questions');
     if (!check.allowed) {
       const usageInfo = getUsageInfo(user);
       return fail(res, 403, 'Monthly limit reached', { upgradeRequired: true, usage: usageInfo });
@@ -179,12 +186,15 @@ Format the problem as a coding interview question similar to LeetCode style.`;
 
   try {
     const question = await callGemini(prompt, userApiKey);
-    if (!useOwnKey) await incrementUsage(user, 'hints');
+    if (!useOwnKey) await incrementUsage(user, 'questions');
     const usageInfo = getUsageInfo(req.user);
     res.json({ question, usage: usageInfo, unlimited: useOwnKey });
   } catch (err) {
     logger.error('Gemini question error:', err);
-    fail(res, 502, 'Failed to generate question. Please try again.');
+    if (err.message?.includes('429') || err.message?.includes('quota')) {
+      return fail(res, 429, 'Gemini quota exceeded. Use your own API key in Settings > Gemini Key.');
+    }
+    return fail(res, 502, 'Failed to generate question. Please try again.');
   }
 }
 
@@ -193,7 +203,7 @@ async function getUsage(req, res) {
   if (!user) return fail(res, 401, 'Unauthorized');
   
   const usageInfo = getUsageInfo(user);
-  success(res, usageInfo);
+  return success(res, usageInfo);
 }
 
 module.exports = { getHint, analyzeCode, generateQuestion, getUsage };

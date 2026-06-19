@@ -15,7 +15,14 @@ export default function ImageZoom({ src, alt, className, children, ...props }) {
 
   return (
     <>
-      <div className="cursor-pointer inline-block" onClick={() => setOpen(true)}>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label={alt ? `Zoom image: ${alt}` : 'Zoom image'}
+        className="cursor-pointer inline-block"
+        onClick={() => setOpen(true)}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(true) } }}
+      >
         {children || <img src={src} alt={alt} className={className} {...props} />}
       </div>
       {open && (

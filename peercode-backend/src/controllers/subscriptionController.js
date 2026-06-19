@@ -33,7 +33,7 @@ async function getPlans(req, res) {
     { id: 'premium', name: 'Premium', price: 299, currency: 'INR', interval: 'month', hints: 180, analyzes: 180, features: ['180 hints/month (30 + 150 extra)', '180 analyzes/month', 'Priority support', 'No ads', 'Advanced analytics'] },
     { id: 'ultra', name: 'Ultra Premium', price: 999, currency: 'INR', interval: 'month', hints: -1, analyzes: -1, features: ['Unlimited hints', 'Unlimited analyzes', 'Priority support', 'No ads', 'Advanced analytics', 'Custom AI models', 'API access'] }
   ];
-  success(res, { plans });
+  return success(res, { plans });
 }
 
 async function createSubscription(req, res) {
@@ -66,7 +66,7 @@ async function createSubscription(req, res) {
     user.subscription.status = 'pending';
     await user.save();
 
-    success(res, {
+    return success(res, {
       orderId: order.id,
       amount: order.amount,
       planId,
@@ -78,7 +78,7 @@ async function createSubscription(req, res) {
     if (err.message?.includes('Razorpay credentials not configured')) {
       return fail(res, 500, 'Payment system not configured. Contact admin.');
     }
-    fail(res, 500, err.message || 'Failed to create subscription order');
+    return fail(res, 500, err.message || 'Failed to create subscription order');
   }
 }
 
@@ -100,17 +100,25 @@ async function verifyPayment(req, res) {
     return fail(res, 400, 'Invalid payment signature');
   }
 
-  if (!user.subscription) user.subscription = {};
+  // Verify this order was created by the current user (prevents cross-user activation)
+  const dbUser = await User.findById(user._id).select('subscription');
+  if (!dbUser) return fail(res, 404, 'User not found');
+  if (dbUser.subscription?.razorpayOrderId && dbUser.subscription.razorpayOrderId !== razorpay_order_id) {
+    logger.warn(`Order ownership mismatch for user ${user._id}: expected ${dbUser.subscription?.razorpayOrderId}, got ${razorpay_order_id}`);
+    return fail(res, 403, 'Order does not belong to this account');
+  }
 
-  user.subscription.plan = planId || user.subscription.plan;
-  user.subscription.status = 'active';
-  user.subscription.currentPeriodStart = new Date();
-  user.subscription.currentPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-  user.subscription.razorpayOrderId = undefined;
-  user.subscription.razorpayPaymentId = razorpay_payment_id;
-  await user.save();
+  if (!dbUser.subscription) dbUser.subscription = {};
 
-  success(res, { plan: user.subscription.plan, status: 'active' }, 'Payment verified. Subscription activated.');
+  dbUser.subscription.plan = planId || dbUser.subscription.plan;
+  dbUser.subscription.status = 'active';
+  dbUser.subscription.currentPeriodStart = new Date();
+  dbUser.subscription.currentPeriodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  dbUser.subscription.razorpayOrderId = undefined;
+  dbUser.subscription.razorpayPaymentId = razorpay_payment_id;
+  await dbUser.save();
+
+  return success(res, { plan: dbUser.subscription.plan, status: 'active' }, 'Payment verified. Subscription activated.');
 }
 
 async function cancelSubscription(req, res) {
@@ -120,8 +128,6 @@ async function cancelSubscription(req, res) {
     return fail(res, 400, 'No active subscription');
   }
 
-  if (!user.subscription) user.subscription = {};
-
   try {
     user.subscription.status = 'cancelled';
     user.subscription.plan = 'free';
@@ -129,10 +135,10 @@ async function cancelSubscription(req, res) {
     user.subscription.razorpayPaymentLinkId = undefined;
     user.subscription.razorpayPaymentLinkUrl = undefined;
     await user.save();
-    success(res, { message: 'Subscription cancelled. You are now on the Free plan.' });
+    return success(res, { message: 'Subscription cancelled. You are now on the Free plan.' });
   } catch (err) {
     logger.error('Cancel subscription error:', err);
-    fail(res, 500, 'Failed to cancel subscription');
+    return fail(res, 500, 'Failed to cancel subscription');
   }
 }
 
@@ -217,7 +223,7 @@ async function getCancelInfo(req, res) {
   const usedAmount = Math.min(planPrice, Math.round(dailyRate * Math.min(daysUsed, daysInPeriod)));
   const refundAmount = Math.max(0, planPrice - usedAmount);
 
-  success(res, {
+  return success(res, {
     plan: planId,
     planName: PLAN_MAP[planId] ? planId.charAt(0).toUpperCase() + planId.slice(1) : 'Unknown',
     planPrice,
@@ -235,7 +241,7 @@ async function getSubscriptionStatus(req, res) {
   
   const sub = user.subscription || { plan: 'free', status: 'active' };
   
-  success(res, {
+  return success(res, {
     plan: sub.plan || 'free',
     status: sub.status || 'active',
     currentPeriodEnd: sub.currentPeriodEnd,

@@ -13,5 +13,7 @@ const SolutionSchema = new mongoose.Schema({
 });
 
 SolutionSchema.index({ problem: 1, createdAt: -1 });
+SolutionSchema.index({ user: 1 });
+SolutionSchema.index({ problem: 1, user: 1 }, { unique: true });
 
 module.exports = mongoose.model('Solution', SolutionSchema);

@@ -2,6 +2,7 @@
 
 const Track = require('../models/Track');
 const User = require('../models/User');
+const Session = require('../models/Session');
 const UserTrackProgress = require('../models/UserTrackProgress');
 const { fail } = require('../utils/httpResponse');
 
@@ -56,16 +57,12 @@ async function getTrackProgress(req, res) {
     return fail(res, 404, 'Track not found');
   }
 
-  const user = await User.findById(req.user.id).lean();
+  const [progress, solvedIds] = await Promise.all([
+    UserTrackProgress.findOne({ user: req.user.id, track: track._id }).lean(),
+    Session.distinct('problem', { participants: req.user.id, 'testResults.allPassed': true }),
+  ]);
 
-  const progress = await UserTrackProgress.findOne({
-    user: req.user.id,
-    track: track._id,
-  }).lean();
-
-  const solvedSet = new Set(
-    (user?.solvedProblems || []).map((sp) => sp.problem.toString())
-  );
+  const solvedSet = new Set(solvedIds.map((id) => id.toString()));
 
   const totalProblems = track.problems.length;
   const completed = progress ? progress.completedProblems.length : 0;
@@ -106,6 +103,11 @@ async function completeProblem(req, res) {
   const { problemId, sessionId } = req.body;
   if (!problemId) {
     return fail(res, 400, 'problemId is required');
+  }
+
+  const inTrack = track.problems.some(p => p.problem && p.problem.toString() === problemId.toString());
+  if (!inTrack) {
+    return fail(res, 400, 'Problem is not part of this track');
   }
 
   let progress = await UserTrackProgress.findOne({

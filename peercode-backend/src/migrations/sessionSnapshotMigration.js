@@ -1,8 +1,8 @@
 'use strict';
 
-const mongoose = require('mongoose');
 const Session = require('../models/Session');
 const Problem = require('../models/Problem');
+const Migration = require('../models/Migration');
 const logger = require('../utils/logger');
 
 /**
@@ -12,15 +12,8 @@ async function migrateSessionProblemSnapshots() {
   try {
     // Only run once (check a flag in DB)
     const FLAG_KEY = 'MIGRATION_SESSION_SNAPSHOT_COMPLETED';
-    
-    // Get or create a migration tracking document
-    const MigrationModel = mongoose.model('Migration', {
-      key: String,
-      completed: Boolean,
-      completedAt: Date
-    });
 
-    const existingMigration = await MigrationModel.findOne({ key: FLAG_KEY });
+    const existingMigration = await Migration.findOne({ key: FLAG_KEY });
     if (existingMigration?.completed) {
       logger.info('Session snapshot migration already completed. Skipping.');
       return;
@@ -53,7 +46,7 @@ async function migrateSessionProblemSnapshots() {
     logger.info(`Migrated ${migrated} sessions with problem snapshots`);
 
     // Mark migration as complete
-    await MigrationModel.findOneAndUpdate(
+    await Migration.findOneAndUpdate(
       { key: FLAG_KEY },
       {
         key: FLAG_KEY,

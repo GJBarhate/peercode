@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { Helmet } from 'react-helmet-async'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { BookOpen, Clock, ChevronRight, CheckCircle2, Target, Sparkles, BarChart3, Search, TrendingUp } from 'lucide-react'
 import Navbar from '../components/common/Navbar'
 import ErrorState from '../components/common/ErrorState'
@@ -25,13 +26,20 @@ const DIFF_COLORS = { easy: 'bg-emerald-500', medium: 'bg-amber-500', hard: 'bg-
 export default function TracksPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [tracks, setTracks] = useState([])
   const [progressMap, setProgressMap] = useState({})
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [searchQuery, setSearchQuery] = useState('')
+  const searchQuery = searchParams.get('q') || ''
+  const setSearchQuery = (val) => {
+    setSearchParams(prev => {
+      if (val) { prev.set('q', val) } else { prev.delete('q') }
+      return prev
+    }, { replace: true })
+  }
 
-  async function load() {
+  const load = useCallback(async function load() {
     setIsLoading(true)
     setError(null)
     try {
@@ -59,15 +67,50 @@ export default function TracksPage() {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [user])
 
-  useEffect(() => { load() }, [user])
+  useEffect(() => { load() }, [load])
 
   const filteredTracks = useMemo(() => {
     if (!searchQuery.trim()) return tracks
     const q = searchQuery.toLowerCase()
     return tracks.filter(t => t.name?.toLowerCase().includes(q) || t.company?.toLowerCase().includes(q) || t.description?.toLowerCase().includes(q))
   }, [tracks, searchQuery])
+
+  const overallStats = useMemo(() => {
+    let totalProblems = 0
+    let totalCompleted = 0
+    let totalHours = 0
+    for (const t of tracks) {
+      const total = t.problemCount || t.problems?.length || 0
+      totalProblems += total
+      totalHours += t.estimatedHours || 0
+      const progress = progressMap[t.slug]
+      if (progress) {
+        totalCompleted += typeof progress.completedProblems === 'number'
+          ? progress.completedProblems
+          : (progress.completedProblems?.length || 0)
+      }
+    }
+    return {
+      totalProblems,
+      totalCompleted,
+      totalHours,
+      completionPct: totalProblems > 0 ? Math.round((totalCompleted / totalProblems) * 100) : 0,
+    }
+  }, [tracks, progressMap])
+
+  const recommendedTrack = useMemo(() => {
+    if (!user || !tracks.length) return null
+    const incomplete = tracks.find(t => {
+      const total = t.problemCount || t.problems?.length || 0
+      if (total === 0) return false
+      const progress = progressMap[t.slug]
+      const completed = progress ? (typeof progress.completedProblems === 'number' ? progress.completedProblems : (progress.completedProblems?.length || 0)) : 0
+      return completed > 0 && completed < total
+    })
+    return incomplete || tracks.find(t => !progressMap[t.slug]) || null
+  }, [tracks, progressMap, user])
 
   if (isLoading) {
     return (
@@ -95,6 +138,10 @@ export default function TracksPage() {
 
   return (
       <div className="min-h-screen bg-white dark:bg-gray-950">
+        <Helmet>
+          <title>Company Tracks | PeerCode</title>
+          <meta name="description" content="Practice coding problems organized by company interview patterns" />
+        </Helmet>
         <Navbar />
       <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-24 pb-16">
         {/* Hero Header */}
@@ -110,9 +157,48 @@ export default function TracksPage() {
             <div className="flex flex-wrap items-center gap-4 mt-4 text-xs text-gray-500 dark:text-gray-600">
               <span className="flex items-center gap-1.5"><BarChart3 className="w-3.5 h-3.5 text-sky-400" />{tracks.length} tracks available</span>
               <span className="flex items-center gap-1.5"><Target className="w-3.5 h-3.5 text-emerald-400" />{tracks.filter(t => t.company).length} company-specific</span>
+              <span className="flex items-center gap-1.5"><BookOpen className="w-3.5 h-3.5 text-purple-400" />{overallStats.totalProblems} total problems</span>
+              {overallStats.totalHours > 0 && <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5 text-amber-400" />~{overallStats.totalHours}h content</span>}
             </div>
           </div>
         </div>
+
+        {/* Overall progress strip for logged-in users */}
+        {user && overallStats.totalProblems > 0 && (
+          <div className="mb-6 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 group hover:border-sky-500/30 transition-colors">
+            <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center">
+                  <TrendingUp className="w-5 h-5 text-sky-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">Your overall progress</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-500">{overallStats.totalCompleted} of {overallStats.totalProblems} problems completed</p>
+                </div>
+              </div>
+              <p className="text-2xl font-bold text-sky-400 tabular-nums">{overallStats.completionPct}%</p>
+            </div>
+            <div className="h-2 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-sky-500 via-indigo-500 to-purple-500 rounded-full transition-all duration-700" style={{ width: `${overallStats.completionPct}%` }} />
+            </div>
+          </div>
+        )}
+
+        {/* Recommended next track */}
+        {user && recommendedTrack && (
+          <Link to={`/tracks/${recommendedTrack.slug}`} className="group block mb-6 relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-teal-500/5 p-5 hover:border-emerald-400/50 transition-all">
+            <div className="absolute right-0 top-0 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="relative flex items-center gap-4 flex-wrap">
+              <div className="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-2xl">⭐</div>
+              <div className="flex-1 min-w-[200px]">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 mb-1">Recommended next</p>
+                <p className="text-base font-bold text-gray-900 dark:text-white">{recommendedTrack.name}</p>
+                {recommendedTrack.description && <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1 mt-0.5">{recommendedTrack.description}</p>}
+              </div>
+              <ChevronRight className="w-5 h-5 text-emerald-400 group-hover:translate-x-1 transition-transform" />
+            </div>
+          </Link>
+        )}
 
         {/* Search */}
         <div className="relative mb-6">

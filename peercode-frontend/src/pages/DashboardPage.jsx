@@ -1,11 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { Helmet } from 'react-helmet-async';
+import { Joyride } from 'react-joyride';
+import { useReveal } from '../hooks/useReveal';
+import { useOnboardingTour, dashboardSteps } from '../hooks/useOnboardingTour';
 import { Link } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid, AreaChart, Area } from 'recharts';
-import { Trophy, Clock, Flame, TrendingUp, Plus, Calendar, Target, AlertCircle, Zap, Crown, Shield, TrendingDown, ArrowUpRight, Users } from 'lucide-react';
+import { Trophy, Clock, Flame, TrendingUp, Plus, Calendar, Target, AlertCircle, Zap, Crown, Shield, TrendingDown, ArrowUpRight, Users, Bot } from 'lucide-react';
 import Navbar from '../components/common/Navbar';
 import ContributionHeatmap from '../components/dashboard/ContributionHeatmap';
+import GlowCard from '../components/common/GlowCard';
+import TiltCard from '../components/common/TiltCard';
 import { NoSessionsIllustration, NoDataIllustration } from '../components/common/EmptyStateIllustrations';
 import { getProfile, getUserSessions, createRoom, getProblems, getSubscriptionStatus } from '../services/api';
+import ForYouSection from '../components/dashboard/ForYouSection';
 
 const PLAN_NAMES = { free: 'Free', pro: 'Pro', premium: 'Premium', ultra: 'Ultra Premium' }
 import { useAuth } from '../context/AuthContext';
@@ -13,7 +20,25 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 
-// Stat card component
+function useCountUp(target, duration = 800) {
+  const [count, setCount] = useState(0);
+  const frameRef = useRef(null);
+  useEffect(() => {
+    if (typeof target !== 'number' || isNaN(target)) { setCount(target); return; }
+    const start = performance.now();
+    const animate = (now) => {
+      const elapsed = now - start;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setCount(Math.round(eased * target));
+      if (progress < 1) frameRef.current = requestAnimationFrame(animate);
+    };
+    frameRef.current = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(frameRef.current);
+  }, [target, duration]);
+  return count;
+}
+
 function StatCard({ icon: Icon, label, value, subtext, color = 'accent' }) {
   const colorClasses = {
     accent: 'text-accent border-accent/20 bg-accent/5',
@@ -21,20 +46,26 @@ function StatCard({ icon: Icon, label, value, subtext, color = 'accent' }) {
     blue: 'text-blue-400 border-blue-400/20 bg-blue-400/5',
     orange: 'text-orange-400 border-orange-400/20 bg-orange-400/5'
   };
+  const numericValue = typeof value === 'number' ? value : parseInt(value);
+  const animated = useCountUp(isNaN(numericValue) ? 0 : numericValue);
+  const displayValue = isNaN(numericValue) ? value : animated;
+  const [ref, visible] = useReveal();
 
   return (
-    <div className={`rounded-lg border p-6 flex items-start gap-4 ${colorClasses[color]}`}>
-      <div className="p-3 rounded-lg bg-gray-100 dark:bg-white/5 backdrop-blur-sm">
-        <Icon className="w-6 h-6" />
-      </div>
-      <div className="flex-1">
-        <p className="text-sm text-gray-500 dark:text-[#5a5a72] mb-1">{label}</p>
-        <div className="flex items-baseline gap-2">
-          <span className="text-3xl font-bold text-gray-900 dark:text-[#f1f1f5]">{value}</span>
-          {subtext && <span className="text-xs text-gray-500 dark:text-[#5a5a72]">{subtext}</span>}
+    <GlowCard>
+      <div ref={ref} className={`rounded-xl border p-6 flex items-start gap-4 hover:scale-[1.02] transition-all duration-200 cursor-default glass-card ${colorClasses[color]} ${visible ? 'reveal-visible' : 'reveal-hidden'}`}>
+        <div className="p-3 rounded-xl bg-gray-100 dark:bg-white/5 backdrop-blur-sm">
+          <Icon className="w-6 h-6" />
+        </div>
+        <div className="flex-1">
+          <p className="text-sm text-gray-500 dark:text-[#5a5a72] mb-1">{label}</p>
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-bold text-gray-900 dark:text-[#f1f1f5] tabular-nums">{displayValue}</span>
+            {subtext && <span className="text-xs text-gray-500 dark:text-[#5a5a72]">{subtext}</span>}
+          </div>
         </div>
       </div>
-    </div>
+    </GlowCard>
   );
 }
 
@@ -210,6 +241,7 @@ function MonthlyStats({ sessions }) {
 export default function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { run: tourRun, completeTour } = useOnboardingTour();
   const [profile, setProfile] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [problems, setProblems] = useState([]);
@@ -222,18 +254,22 @@ export default function DashboardPage() {
       try {
         setIsLoading(true);
         setError(null);
-        const [profileRes, sessionsRes, problemsRes, subRes] = await Promise.all([
+        const [profileRes, sessionsRes, problemsRes, subRes] = await Promise.allSettled([
           getProfile(),
-          getUserSessions(),
+          getUserSessions({ limit: 500 }),
           getProblems(),
           getSubscriptionStatus()
         ]);
-        setProfile(profileRes.data);
-        setSessions(sessionsRes.data || []);
-        setProblems(problemsRes.data || []);
-        setSubscription(subRes.data?.data || { plan: 'free', status: 'active', usage: { hints: { used: 0, limit: null }, analyzes: { used: 0, limit: null } } });
+        if (profileRes.status === 'fulfilled') setProfile(profileRes.value.data);
+        if (sessionsRes.status === 'fulfilled') {
+          const sessionsData = sessionsRes.value.data;
+          setSessions(Array.isArray(sessionsData) ? sessionsData : (sessionsData?.sessions || []));
+        }
+        if (problemsRes.status === 'fulfilled') setProblems(problemsRes.value.data?.problems || []);
+        if (subRes.status === 'fulfilled') {
+          setSubscription(subRes.value.data?.data || { plan: 'free', status: 'active', usage: { hints: { used: 0, limit: null }, analyzes: { used: 0, limit: null } } });
+        }
       } catch (err) {
-        console.error('Dashboard error:', err);
         setError('Failed to load dashboard');
       } finally {
         setIsLoading(false);
@@ -243,8 +279,9 @@ export default function DashboardPage() {
     loadDashboard();
   }, []);
 
-const sortedSessions = [...sessions].sort((a, b) =>
-    new Date(b.createdAt) - new Date(a.createdAt)
+const sortedSessions = useMemo(() =>
+    [...sessions].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+    [sessions]
   );
 
   const currentStreak = profile?.currentStreak || 0;
@@ -268,13 +305,18 @@ const sortedSessions = [...sessions].sort((a, b) =>
   const percentile = Math.min(100, Math.max(0, Math.round((elo - 800) / 1200 * 100)));
   const hasSessionToday = sessions.some(s => new Date(s.createdAt).toISOString().split('T')[0] === new Date().toISOString().split('T')[0]);
 
-  const randomProblem = problems.length > 0 ? problems[0] : null;
+  const randomProblem = useMemo(() => {
+    const solvedSlugs = new Set(Array.isArray(sessions) ? sessions.filter(s => s.testResults?.allPassed).map(s => s.problemSnapshot?.slug || s.problem?.slug).filter(Boolean) : [])
+    const unsolved = problems.filter(p => !solvedSlugs.has(p.slug))
+    const pool = unsolved.length > 0 ? unsolved : problems
+    return pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null
+  }, [problems, sessions]);
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a14]">
         <Navbar />
-        <main className="max-w-7xl mx-auto px-6 py-8">
+        <main className="max-w-7xl mx-auto px-6 pt-20 pb-12">
           <div className="h-10 w-64 bg-gray-200 dark:bg-white/5 rounded animate-pulse mb-8" />
           <div className="grid grid-cols-4 gap-6">
             {[1,2,3,4].map(i => <div key={i} className="h-32 bg-gray-200 dark:bg-white/5 rounded animate-pulse" />)}
@@ -286,22 +328,41 @@ const sortedSessions = [...sessions].sort((a, b) =>
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-[#0a0a14]">
+      <Helmet>
+        <title>Dashboard — PeerCode</title>
+        <meta name="description" content="Track your coding progress, ELO rating, streaks, and session history." />
+      </Helmet>
       <Navbar />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+      <Joyride
+        steps={dashboardSteps}
+        run={tourRun}
+        continuous
+        showSkipButton
+        showProgress
+        callback={(data) => { if (data.status === 'finished' || data.status === 'skipped') completeTour() }}
+        styles={{
+          options: { primaryColor: '#6366f1', backgroundColor: '#1a1a24', textColor: '#f0f0f5', arrowColor: '#1a1a24' },
+          tooltip: { borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' },
+          buttonNext: { borderRadius: '8px' },
+          buttonBack: { color: '#a0a0b2' },
+          buttonSkip: { color: '#5a5a72' },
+        }}
+      />
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 pt-20 pb-12 space-y-6">
         {/* Header */}
         <div>
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-[#f1f1f5]">Dashboard</h1>
+              <h1 className="text-3xl font-bold text-shimmer">Dashboard</h1>
               <p className="text-gray-600 dark:text-[#9191a8]">Welcome back, {user?.username}</p>
             </div>
           </div>
 
           {/* Practice CTAs */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div data-tour="practice-ctas" className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Link
               to="/problems"
-              className="group relative overflow-hidden rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-600/20 to-indigo-800/10 p-6 hover:from-indigo-600/30 hover:to-indigo-800/20 transition-all duration-300 hover:shadow-lg hover:shadow-indigo-500/10"
+              className="group relative overflow-hidden rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-indigo-600/20 to-indigo-800/10 p-6 hover:from-indigo-600/30 hover:to-indigo-800/20 transition-all duration-300 hover:shadow-lg hover:shadow-indigo-500/10 glass-card"
             >
               <div className="flex items-start gap-4">
                 <div className="p-3 rounded-xl bg-indigo-600/20 group-hover:bg-indigo-600/30 transition-colors">
@@ -317,7 +378,7 @@ const sortedSessions = [...sessions].sort((a, b) =>
 
             <Link
               to="/find-partner"
-              className="group relative overflow-hidden rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-600/20 to-violet-800/10 p-6 hover:from-violet-600/30 hover:to-violet-800/20 transition-all duration-300 hover:shadow-lg hover:shadow-violet-500/10"
+              className="group relative overflow-hidden rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-600/20 to-violet-800/10 p-6 hover:from-violet-600/30 hover:to-violet-800/20 transition-all duration-300 hover:shadow-lg hover:shadow-violet-500/10 glass-card"
             >
               <div className="flex items-start gap-4">
                 <div className="p-3 rounded-xl bg-violet-600/20 group-hover:bg-violet-600/30 transition-colors">
@@ -330,11 +391,27 @@ const sortedSessions = [...sessions].sort((a, b) =>
                 <ArrowUpRight className="w-5 h-5 text-violet-400 mt-2 flex-shrink-0 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
               </div>
             </Link>
+
+            <Link
+              to="/ai-interview"
+              className="group relative overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-600/20 to-teal-800/10 p-6 hover:from-emerald-600/30 hover:to-teal-800/20 transition-all duration-300 hover:shadow-lg hover:shadow-emerald-500/10 glass-card"
+            >
+              <div className="flex items-start gap-4">
+                <div className="p-3 rounded-xl bg-emerald-600/20 group-hover:bg-emerald-600/30 transition-colors">
+                  <Bot className="w-6 h-6 text-emerald-400" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-gray-100 mb-1">AI Mock Interview</h3>
+                  <p className="text-sm text-gray-400">Upload resume, practice for MNCs with AI interviewer & get detailed feedback</p>
+                </div>
+                <ArrowUpRight className="w-5 h-5 text-emerald-400 mt-2 flex-shrink-0 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
+              </div>
+            </Link>
           </div>
         </div>
 
         {/* Stat Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div data-tour="stat-cards" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 stagger-reveal">
           <StatCard icon={Trophy} label="Current ELO" value={profile?.elo || 1200} color="accent" />
           <StatCard icon={Target} label="Sessions Completed" value={sessions.length} color="blue" />
           <StatCard icon={Flame} label="Current Streak" value={profile?.currentStreak || 0} subtext="days" color="orange" />
@@ -427,12 +504,12 @@ const sortedSessions = [...sessions].sort((a, b) =>
         {/* Row 2: ELO Trend + Streak Card */}
         <div className="grid grid-cols-1 lg:grid-cols-[65%_35%] gap-6">
           {/* ELO Trend */}
-          <div className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-gray-900 p-6">
+          <div data-tour="elo-trend" className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-gray-900 p-6">
             <h3 className="text-lg font-bold text-gray-900 dark:text-[#f1f1f5] mb-4">ELO Trend</h3>
             {sortedSessions.length > 0 ? (() => {
               const eloData = sortedSessions.slice(-20).map((s, i) => {
-                const myElo = s.eloData?.find(e => e.userId === user?.id)
-                const elo = myElo?.eloAtEnd || s.eloAtEnd || 1200
+                const myElo = s.eloData?.find(e => e.userId === user?.id || e.userId === user?._id || String(e.userId) === String(user?.id))
+                const elo = myElo?.eloAtEnd || s.eloAtEnd || s.eloData?.[0]?.eloAtEnd || 1200
                 return { i: i + 1, elo }
               })
               const computed = eloData.map((d, i) => ({
@@ -531,38 +608,84 @@ const sortedSessions = [...sessions].sort((a, b) =>
           </div>
 
           {/* Quick Links */}
-          <div className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-gray-900 p-6">
+          <div data-tour="quick-links" className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-gray-900 p-6">
             <h3 className="text-lg font-bold text-gray-900 dark:text-[#f1f1f5] mb-4">Quick Links</h3>
             <div className="flex flex-col gap-3">
-              <Link to="/problems" className="flex items-center justify-between text-gray-900 dark:text-[#f1f1f5] hover:text-accent transition-colors">
-                Practice Problems <span className="text-accent">→</span>
+              <Link to="/tracks" className="group flex items-center justify-between text-gray-900 dark:text-[#f1f1f5] hover:text-accent transition-colors">
+                <span className="flex items-center gap-2"><span className="text-base">📚</span> Browse Tracks</span>
+                <span className="text-accent group-hover:translate-x-1 transition-transform">→</span>
               </Link>
-              <Link to="/tracks" className="flex items-center justify-between text-gray-900 dark:text-[#f1f1f5] hover:text-accent transition-colors">
-                View Tracks <span className="text-accent">→</span>
+              <Link to="/ai-interview" className="group flex items-center justify-between text-gray-900 dark:text-[#f1f1f5] hover:text-accent transition-colors">
+                <span className="flex items-center gap-2"><span className="text-base">🤖</span> Mock Interview</span>
+                <span className="text-accent group-hover:translate-x-1 transition-transform">→</span>
               </Link>
-              <Link to="/profile" className="flex items-center justify-between text-gray-900 dark:text-[#f1f1f5] hover:text-accent transition-colors">
-                My Profile <span className="text-accent">→</span>
+              <Link to="/profile" className="group flex items-center justify-between text-gray-900 dark:text-[#f1f1f5] hover:text-accent transition-colors">
+                <span className="flex items-center gap-2"><span className="text-base">👤</span> My Profile</span>
+                <span className="text-accent group-hover:translate-x-1 transition-transform">→</span>
+              </Link>
+              <Link to="/subscription" className="group flex items-center justify-between text-gray-900 dark:text-[#f1f1f5] hover:text-accent transition-colors">
+                <span className="flex items-center gap-2"><span className="text-base">👑</span> Subscription</span>
+                <span className="text-accent group-hover:translate-x-1 transition-transform">→</span>
               </Link>
             </div>
           </div>
 
           {/* Next Problem */}
-          <div className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-gray-900 p-6">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-[#f1f1f5] mb-4">Next Problem</h3>
+          <div className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-gray-900 p-6 flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-[#f1f1f5]">Suggested Next</h3>
+              {randomProblem && <span className="text-[10px] uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">Unsolved</span>}
+            </div>
             {randomProblem ? (
-              <Link to={`/problems/${randomProblem._id}`} className="flex items-center justify-between text-gray-900 dark:text-[#f1f1f5] hover:text-accent transition-colors">
-                <span>{randomProblem.title}</span> <span className="text-accent">→</span>
+              <Link to={`/problems/${randomProblem.slug || randomProblem._id}`} className="group flex flex-col flex-1 gap-3 -m-2 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-white/[0.03] transition-colors">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="font-semibold text-gray-900 dark:text-[#f1f1f5] text-base leading-tight">{randomProblem.title}</span>
+                  <span className={`flex-shrink-0 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                    randomProblem.difficulty?.toLowerCase() === 'easy' ? 'bg-emerald-500/10 text-emerald-400'
+                    : randomProblem.difficulty?.toLowerCase() === 'hard' ? 'bg-red-500/10 text-red-400'
+                    : 'bg-amber-500/10 text-amber-400'
+                  }`}>{randomProblem.difficulty}</span>
+                </div>
+                {randomProblem.tags?.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {randomProblem.tags.slice(0, 3).map(t => (
+                      <span key={t} className="text-[10px] bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 px-1.5 py-0.5 rounded">{t}</span>
+                    ))}
+                  </div>
+                )}
+                <span className="mt-auto text-sm text-accent font-medium group-hover:translate-x-1 transition-transform">Start solving →</span>
               </Link>
             ) : (
-              <Link to="/problems" className="flex items-center justify-between text-gray-900 dark:text-[#f1f1f5] hover:text-accent transition-colors">
-                Practice Problems <span className="text-accent">→</span>
-              </Link>
+              <p className="text-sm text-gray-500 dark:text-[#5a5a72]">No problems available yet.</p>
             )}
           </div>
         </div>
 
         {/* Heatmap */}
         {sortedSessions.length > 0 && <ContributionHeatmap sessions={sortedSessions} />}
+
+        {/* Today's Goal */}
+        {!hasSessionToday && (
+          <div className="relative overflow-hidden rounded-xl border border-amber-500/20 bg-gradient-to-r from-amber-500/10 to-orange-500/5 p-5">
+            <div className="absolute right-0 top-0 bottom-0 w-32 bg-gradient-to-l from-amber-500/5 to-transparent pointer-events-none" />
+            <div className="flex items-center gap-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-2xl">🎯</div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-amber-300 text-sm mb-0.5">Complete today's practice session!</p>
+                <p className="text-xs text-amber-400/70">
+                  {currentStreak > 0 ? `You're on a ${currentStreak}-day streak — don't break it!` : 'Start a streak today — one session a day keeps the offer away.'}
+                </p>
+              </div>
+              <Link to="/problems" className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-amber-900 bg-amber-400 hover:bg-amber-300 transition-colors active:scale-[0.97]">
+                <Zap className="w-3.5 h-3.5" />
+                Practice Now
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* For You — Smart Recommendations */}
+        <ForYouSection />
 
         {/* Recent Sessions */}
         <div className="rounded-lg border border-gray-200 dark:border-white/[0.06] bg-white dark:bg-gray-900 p-6">
@@ -585,34 +708,34 @@ const sortedSessions = [...sessions].sort((a, b) =>
                       <th className="text-right py-3 px-4 font-semibold text-gray-500 dark:text-[#5a5a72]">ACTION</th>
                     </tr>
                 </thead>
-                <tbody>
-                  {sortedSessions.slice(0, 10).map(s => (
-                    <tr key={s._id} className="border-b border-gray-200 dark:border-white/[0.06] hover:bg-gray-50 dark:hover:bg-white/[0.02]">
-                      <td className="py-3 px-4 text-gray-900 dark:text-[#f1f1f5]">{s.problemSnapshot?.title || 'Unknown'}</td>
-                      <td className="py-3 px-4">
-                        <span className={s.testResults?.allPassed ? 'text-green-400' : 'text-red-400'}>
-                          {s.testResults?.allPassed ? '✓ Accepted' : '✗ Wrong Answer'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-gray-500 dark:text-[#5a5a72]">{Math.round((s.duration || 0) / 60)}m</td>
-                      <td className="py-3 px-4 text-right">
-                        {s.eloDelta != null ? (
-                          <span className={s.eloDelta >= 0 ? 'text-green-400' : 'text-red-400'}>
-                            {s.eloDelta >= 0 ? '+' : ''}{s.eloDelta}
-                          </span>
-                        ) : (
-                          <span className="text-gray-500 dark:text-[#5a5a72]">—</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <Link to={`/debrief/${s.roomId || s._id}`} className="text-accent hover:text-[#7c5ff5] transition-colors text-sm">
-                          View Debrief →
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
               </table>
+              <div style={{ height: Math.min(sortedSessions.length * 48, 480), overflow: 'auto' }}>
+                {sortedSessions.map(s => (
+                  <div key={s._id} className="flex items-center text-sm border-b border-gray-200 dark:border-white/[0.06] hover:bg-gray-50 dark:hover:bg-white/[0.02]" style={{ height: 48 }}>
+                    <div className="flex-[2] py-3 px-4 text-gray-900 dark:text-[#f1f1f5] truncate">{s.problemSnapshot?.title || 'Unknown'}</div>
+                    <div className="flex-[1.5] py-3 px-4">
+                      <span className={s.testResults?.allPassed ? 'text-green-400' : 'text-red-400'}>
+                        {s.testResults?.allPassed ? '✓ Accepted' : '✗ Wrong'}
+                      </span>
+                    </div>
+                    <div className="flex-1 py-3 px-4 text-gray-500 dark:text-[#5a5a72]">{Math.round((s.duration || 0) / 60)}m</div>
+                    <div className="flex-1 py-3 px-4 text-right">
+                      {s.eloDelta != null ? (
+                        <span className={s.eloDelta >= 0 ? 'text-green-400' : 'text-red-400'}>
+                          {s.eloDelta >= 0 ? '+' : ''}{s.eloDelta}
+                        </span>
+                      ) : (
+                        <span className="text-gray-500 dark:text-[#5a5a72]">—</span>
+                      )}
+                    </div>
+                    <div className="flex-1 py-3 px-4 text-right">
+                      <Link to={`/debrief/${s.roomId || s._id}`} className="text-accent hover:text-[#7c5ff5] transition-colors text-sm">
+                        Debrief →
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

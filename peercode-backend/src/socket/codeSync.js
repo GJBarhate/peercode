@@ -12,6 +12,7 @@ const JUDGE0_URL = 'https://ce.judge0.com/submissions';
 module.exports = function (io) {
   const snapshotTimers = new Map();
   const roomChats = new Map(); // Store chat messages per room
+  const socketRoomMap = new Map(); // socketId -> roomId for snapshot cleanup
 
   io.on('connection', (socket) => {
     // ...existing code...
@@ -35,7 +36,12 @@ module.exports = function (io) {
       io.to(to).emit('yjs-state-response', state);
     });
 
+    const cursorTimestamps = new Map();
     socket.on('cursor-update', (roomId, cursor) => {
+      const now = Date.now();
+      const last = cursorTimestamps.get(roomId) || 0;
+      if (now - last < 33) return; // throttle to ~30fps
+      cursorTimestamps.set(roomId, now);
       io.to(roomId).except(socket.id).emit('cursor-update', {
         ...cursor,
         socketId: socket.id,
@@ -46,7 +52,11 @@ module.exports = function (io) {
       if (!roomId) {
         return;
       }
+      if (code && Buffer.byteLength(code, 'utf8') > 100_000) {
+        return; // Reject snapshots > 100KB
+      }
 
+      socketRoomMap.set(socket.id, roomId);
       const timerKey = `${roomId}`;
       if (snapshotTimers.has(timerKey)) {
         clearTimeout(snapshotTimers.get(timerKey));
@@ -133,13 +143,6 @@ module.exports = function (io) {
       socket.emit('chat-history', messages);
     });
 
-    socket.on('run-code-result', (payload) => {
-      const { roomId } = payload || {};
-      if (roomId) {
-        io.to(roomId).emit('run-code-result', payload);
-      }
-    });
-
     socket.on('run-code', async (payload) => {
       try {
         const { roomId, code, language, testCases, problemSlug, problemId } = payload || {};
@@ -205,18 +208,25 @@ module.exports = function (io) {
       }
     });
 
+    socket.on('room-cleanup', (roomId) => {
+      if (roomId) {
+        roomChats.delete(roomId);
+      }
+    });
+
     socket.on('disconnect', () => {
-      // Cleanup empty chat rooms
       for (const [roomId, messages] of roomChats.entries()) {
         if (messages.length === 0) {
           roomChats.delete(roomId);
         }
       }
 
-      // Clear pending snapshot timers for disconnected user's rooms
-      for (const [timerKey, timer] of snapshotTimers.entries()) {
-        clearTimeout(timer);
-        snapshotTimers.delete(timerKey);
+      // Only clear the snapshot timer for this socket's room, not all rooms
+      const roomId = socketRoomMap.get(socket.id);
+      socketRoomMap.delete(socket.id);
+      if (roomId && snapshotTimers.has(roomId)) {
+        clearTimeout(snapshotTimers.get(roomId));
+        snapshotTimers.delete(roomId);
       }
     });
   });

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { Helmet } from 'react-helmet-async'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Users, ChevronLeft, Lightbulb, Code2, X, Clock, Cpu, Flag } from 'lucide-react'
 import Navbar from '../components/common/Navbar'
@@ -24,7 +25,8 @@ export default function ProblemDetailPage() {
   const [code, setCode] = useState(STARTER_CODE.javascript)
   const [isCreating, setIsCreating] = useState(false)
   const [splitPos, setSplitPos] = useState(40) // Left panel width %
-  const [isDragging, setIsDragging] = useState(false)
+  const [isDraggingH, setIsDraggingH] = useState(false)  // horizontal
+  const [isDraggingV, setIsDraggingV] = useState(false)  // vertical (test panel)
   const [testPanelHeight, setTestPanelHeight] = useState(280)
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false)
   const [aiMode, setAiMode] = useState(null)
@@ -87,16 +89,24 @@ export default function ProblemDetailPage() {
   }
 
   const handleMouseMove = (e) => {
-    if (!isDragging || !containerRef.current) return
-    const rect = containerRef.current.getBoundingClientRect()
-    const newPos = ((e.clientX - rect.left) / containerRef.current.offsetWidth) * 100
-    if (newPos >= 20 && newPos <= 70) setSplitPos(newPos)
+    if (isDraggingH && containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect()
+      const newPos = ((e.clientX - rect.left) / containerRef.current.offsetWidth) * 100
+      if (newPos >= 20 && newPos <= 70) setSplitPos(newPos)
+    }
+    if (isDraggingV) {
+      const rightPanel = containerRef.current?.querySelector('.test-panel-container')
+      if (!rightPanel) return
+      const rect = rightPanel.parentElement.getBoundingClientRect()
+      const fromBottom = rect.bottom - e.clientY
+      if (fromBottom >= 120 && fromBottom <= 600) setTestPanelHeight(fromBottom)
+    }
   }
 
-  const handleMouseUp = () => setIsDragging(false)
+  const handleMouseUp = () => { setIsDraggingH(false); setIsDraggingV(false) }
 
   useEffect(() => {
-    if (isDragging) {
+    if (isDraggingH || isDraggingV) {
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
       return () => {
@@ -104,7 +114,7 @@ export default function ProblemDetailPage() {
         document.removeEventListener('mouseup', handleMouseUp)
       }
     }
-  }, [isDragging, splitPos])
+  }, [isDraggingH, isDraggingV, splitPos])
 
   const handleGetHint = async () => {
     setAiMode('hint')
@@ -147,6 +157,10 @@ export default function ProblemDetailPage() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-50 dark:bg-[#0a0a14] overflow-hidden">
+      <Helmet>
+        <title>{problem?.title || 'Problem'} | PeerCode</title>
+        <meta name="description" content="Solve this coding problem on PeerCode" />
+      </Helmet>
       <Navbar />
       
       {/* Problem Toolbar (40px) */}
@@ -182,7 +196,7 @@ export default function ProblemDetailPage() {
       </div>
 
       {/* Main Content (3-panel layout) */}
-      <div 
+      <div
         ref={containerRef}
         className="flex-1 flex overflow-hidden"
         onMouseMove={handleMouseMove}
@@ -198,11 +212,11 @@ export default function ProblemDetailPage() {
           <ProblemPanel problem={problem} />
         </div>
 
-        {/* Drag Handle */}
+        {/* Horizontal Drag Handle */}
         {!leftPanelCollapsed && (
           <div
-            onMouseDown={() => setIsDragging(true)}
-            className="w-1 bg-transparent hover:bg-[#6d4df2]/30 cursor-col-resize transition-colors"
+            onMouseDown={() => setIsDraggingH(true)}
+            className="w-1.5 bg-transparent hover:bg-[#6d4df2]/40 cursor-col-resize transition-colors flex-shrink-0"
           />
         )}
 
@@ -255,13 +269,13 @@ export default function ProblemDetailPage() {
             </div>
 
             {/* Test Panel Section */}
-            <div 
-              className="bg-white dark:bg-[#11111f] overflow-hidden flex flex-col"
+            <div
+              className="test-panel-container bg-white dark:bg-[#11111f] overflow-hidden flex flex-col flex-shrink-0"
               style={{ height: `${testPanelHeight}px` }}
             >
               <div
-                onMouseDown={() => setIsDragging(true)}
-                className="h-1 bg-transparent hover:bg-[#6d4df2]/30 cursor-row-resize transition-colors"
+                onMouseDown={() => setIsDraggingV(true)}
+                className="h-1.5 bg-transparent hover:bg-[#6d4df2]/40 cursor-row-resize transition-colors flex-shrink-0"
               />
               <TestCaseRunner
                 code={code}

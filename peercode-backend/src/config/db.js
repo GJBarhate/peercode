@@ -11,6 +11,7 @@ async function connectDB() {
     try {
       await mongoose.connect(process.env.MONGO_URI, {
         serverSelectionTimeoutMS: 5000,
+        maxPoolSize: 20,
       });
       logger.info('MongoDB connected');
       return;

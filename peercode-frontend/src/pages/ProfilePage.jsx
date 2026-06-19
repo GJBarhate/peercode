@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Award, CalendarDays, Crown, Flame, Gem, KeyRound, Lock, Save, ShieldCheck, Star, Trophy, User, Zap, Chrome, Unlink2 as Unlink } from 'lucide-react'
+import { Helmet } from 'react-helmet-async'
+import { Award, CalendarDays, Crown, Flame, Gem, KeyRound, Lock, Save, ShieldCheck, Star, Trophy, User, Zap, Chrome, Unlink2 as Unlink, BarChart3 } from 'lucide-react'
 import Navbar from '../components/common/Navbar'
 import ErrorState from '../components/common/ErrorState'
 import GeminiKeyManager from '../components/gemini/GeminiKeyManager'
 import Skeleton from '../components/common/Skeleton'
+import StatsTab from '../components/profile/StatsTab'
 import { changePassword, getErrorMessage, getProfile, updateProfile, getSubscriptionStatus, linkGoogleAccount, unlinkGoogleAccount } from '../services/api'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate, Link } from 'react-router-dom'
@@ -68,6 +70,7 @@ export default function ProfilePage() {
   const [isLinkingGoogle, setIsLinkingGoogle] = useState(false)
   const [isUnlinkingGoogle, setIsUnlinkingGoogle] = useState(false)
   const [googleAvatarError, setGoogleAvatarError] = useState(false)
+  const [activeTab, setActiveTab] = useState('settings')
 
   async function load() {
     setIsLoading(true)
@@ -136,19 +139,38 @@ export default function ProfilePage() {
   }
 
   const handleUnlinkGoogle = async () => {
-    if (!window.confirm('Are you sure you want to unlink your Google account? You will need a password to sign in.')) {
-      return
-    }
-    setIsUnlinkingGoogle(true)
-    try {
-      await unlinkGoogleAccount()
-      toast.success('Google account unlinked successfully')
-      load()
-    } catch (err) {
-      toast.error(getErrorMessage(err, 'Failed to unlink Google account'))
-    } finally {
-      setIsUnlinkingGoogle(false)
-    }
+    toast((t) => (
+      <div className="flex flex-col gap-2">
+        <p className="text-sm font-medium">Unlink Google account?</p>
+        <p className="text-xs text-gray-500">You will need a password to sign in.</p>
+        <div className="flex gap-2">
+          <button
+            onClick={async () => {
+              toast.dismiss(t.id)
+              setIsUnlinkingGoogle(true)
+              try {
+                await unlinkGoogleAccount()
+                toast.success('Google account unlinked successfully')
+                load()
+              } catch (err) {
+                toast.error(getErrorMessage(err, 'Failed to unlink Google account'))
+              } finally {
+                setIsUnlinkingGoogle(false)
+              }
+            }}
+            className="px-3 py-1 rounded-lg text-xs font-semibold bg-red-600 hover:bg-red-500 text-white transition-colors"
+          >
+            Unlink
+          </button>
+          <button
+            onClick={() => toast.dismiss(t.id)}
+            className="px-3 py-1 rounded-lg text-xs font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    ), { duration: 8000 })
   }
 
   const elo = profile?.elo || 1200
@@ -189,9 +211,33 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+      <Helmet>
+        <title>My Profile | PeerCode</title>
+        <meta name="description" content="View and manage your PeerCode profile" />
+      </Helmet>
       <Navbar />
       <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-24 pb-16 space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1 w-fit">
+          {[
+            { key: 'settings', label: 'Settings', icon: User },
+            { key: 'stats', label: 'Stats', icon: BarChart3 },
+          ].map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === key ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-gray-200'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'stats' && <StatsTab profile={profile} />}
+
+        {activeTab === 'settings' && (<>
           <section className="lg:col-span-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-6">
             <div className="flex flex-col sm:flex-row sm:items-center gap-5 mb-6">
               <div className="w-16 h-16 bg-indigo-600 rounded-lg flex items-center justify-center text-2xl font-bold text-gray-900 dark:text-white">
@@ -301,7 +347,6 @@ export default function ProfilePage() {
               </div>
             </div>
           </section>
-        </div>
 
         <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
@@ -514,6 +559,7 @@ export default function ProfilePage() {
         </section>
 
         <GeminiKeyManager />
+      </>)}
       </div>
     </div>
   )

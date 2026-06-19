@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import './tokens.css';
 
 @tailwind base;
 @tailwind components;
@@ -488,3 +489,291 @@
     color: black !important;
   }
 }
+
+/* ── Input Focus Glow ─────────────────────────────────── */
+@keyframes focusPulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.4); }
+  50% { box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15); }
+}
+input:focus, textarea:focus, select:focus {
+  animation: focusPulse 1.5s ease infinite;
+}
+
+/* ── Gradient Mesh Hero ──────────────────────────────── */
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+.hero-gradient {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #3b82f6 100%);
+  background-size: 400% 400%;
+  animation: gradientShift 8s ease infinite;
+}
+
+/* ── Scroll reveal ────────────────────────────────────── */
+.reveal-hidden {
+  opacity: 0;
+  transform: translateY(16px);
+}
+.reveal-visible {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.5s ease, transform 0.5s ease;
+}
+
+/* ── HeroIllustration Float ──────────────────────────── */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+/* ── NProgress Override ──────────────────────────────── */
+#nprogress .bar {
+  background: linear-gradient(90deg, #6366f1, #8b5cf6, #a78bfa) !important;
+  height: 3px !important;
+}
+#nprogress .peg {
+  box-shadow: 0 0 10px #8b5cf6, 0 0 5px #8b5cf6 !important;
+}
+
+/* ── Glassmorphism ──────────────────────────────────── */
+.glass-card {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+.glass-card-hover:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* ── Gradient Border ───────────────────────────────── */
+.gradient-border {
+  position: relative;
+  border: none !important;
+}
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.5), rgba(168, 85, 247, 0.5), rgba(59, 130, 246, 0.3));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* ── Aurora / Northern Lights Background ───────────── */
+@keyframes aurora {
+  0%, 100% {
+    background-position: 0% 50%;
+    filter: hue-rotate(0deg);
+  }
+  25% { background-position: 50% 100%; }
+  50% {
+    background-position: 100% 50%;
+    filter: hue-rotate(30deg);
+  }
+  75% { background-position: 50% 0%; }
+}
+.aurora-bg {
+  background: linear-gradient(
+    -45deg,
+    rgba(99, 102, 241, 0.15),
+    rgba(139, 92, 246, 0.12),
+    rgba(59, 130, 246, 0.1),
+    rgba(16, 185, 129, 0.08),
+    rgba(139, 92, 246, 0.12)
+  );
+  background-size: 400% 400%;
+  animation: aurora 15s ease-in-out infinite;
+}
+
+/* ── Animated Gradient Text ────────────────────────── */
+@keyframes textShimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.text-shimmer {
+  background: linear-gradient(90deg, #818cf8, #c084fc, #f472b6, #818cf8);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: textShimmer 4s ease infinite;
+}
+
+/* ── Glow-on-hover (mouse-follow via JS + CSS var) ── */
+.glow-card {
+  position: relative;
+  overflow: hidden;
+}
+.glow-card::after {
+  content: '';
+  position: absolute;
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
+  border-radius: 50%;
+  transform: translate(var(--glow-x, -150px), var(--glow-y, -150px));
+  pointer-events: none;
+  transition: opacity 0.3s;
+  opacity: 0;
+}
+.glow-card:hover::after {
+  opacity: 1;
+}
+
+/* ── Button Ripple ─────────────────────────────────── */
+@keyframes rippleEffect {
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+.ripple-btn {
+  position: relative;
+  overflow: hidden;
+}
+.ripple-btn .ripple-circle {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  transform: scale(0);
+  animation: rippleEffect 0.6s ease-out;
+  pointer-events: none;
+}
+
+/* ── Magnetic Button ───────────────────────────────── */
+.magnetic-btn {
+  transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+/* ── 3D Tilt Card ──────────────────────────────────── */
+.tilt-card {
+  transition: transform 0.15s ease-out;
+  transform-style: preserve-3d;
+  perspective: 1000px;
+}
+
+/* ── Particles Canvas ──────────────────────────────── */
+.particles-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+/* ── Custom Cursor ─────────────────────────────────── */
+.custom-cursor {
+  cursor: none;
+}
+.cursor-dot {
+  position: fixed;
+  width: 8px;
+  height: 8px;
+  background: #818cf8;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9999;
+  transition: transform 0.1s ease, width 0.2s ease, height 0.2s ease, background 0.2s ease;
+  transform: translate(-50%, -50%);
+  mix-blend-mode: difference;
+}
+.cursor-dot.active {
+  width: 40px;
+  height: 40px;
+  background: rgba(129, 140, 248, 0.3);
+  border: 1px solid rgba(129, 140, 248, 0.6);
+}
+
+/* ── Staggered Fade-In with Scale ──────────────────── */
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.stagger-reveal > * {
+  opacity: 0;
+  animation: fadeInScale 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.stagger-reveal > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-reveal > *:nth-child(2) { animation-delay: 80ms; }
+.stagger-reveal > *:nth-child(3) { animation-delay: 160ms; }
+.stagger-reveal > *:nth-child(4) { animation-delay: 240ms; }
+.stagger-reveal > *:nth-child(5) { animation-delay: 320ms; }
+.stagger-reveal > *:nth-child(6) { animation-delay: 400ms; }
+.stagger-reveal > *:nth-child(7) { animation-delay: 480ms; }
+.stagger-reveal > *:nth-child(8) { animation-delay: 560ms; }
+
+/* ── Animated Tab Underline ────────────────────────── */
+.tab-underline {
+  position: relative;
+}
+.tab-underline::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, #6366f1, #a78bfa);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.tab-underline.active::after,
+.tab-underline:hover::after {
+  transform: scaleX(1);
+}
+
+/* ── Smooth Height Collapse ────────────────────────── */
+.collapse-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.collapse-panel.open {
+  grid-template-rows: 1fr;
+}
+.collapse-panel > div {
+  overflow: hidden;
+}
+
+/* ── Checkbox Bounce ───────────────────────────────── */
+@keyframes checkBounce {
+  0% { transform: scale(0); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+.check-bounce {
+  animation: checkBounce 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── Typing Indicator ──────────────────────────────── */
+@keyframes typingDot {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-4px); }
+}
+.typing-dot { animation: typingDot 1.4s infinite ease-in-out; }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* ── Parallax Helper ───────────────────────────────── */
+.parallax-slow { will-change: transform; }
+.parallax-fast { will-change: transform; }

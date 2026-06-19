@@ -6,7 +6,9 @@ const { computeUserStreak } = require('../utils/streakCalculator');
 const { fail } = require('../utils/httpResponse');
 
 async function getProfile(req, res) {
-  const user = await User.findById(req.user.id);
+  const userId = req.user._id || req.user.id;
+  if (!userId) return fail(res, 400, 'Invalid user ID');
+  const user = await User.findById(userId);
   if (!user) {
     return fail(res, 404, 'User not found');
   }
@@ -21,7 +23,8 @@ async function getProfile(req, res) {
   profile.totalSessions = streakData.totalSessions;
 
   // Build activity counts per day for heatmap
-  const sessions = await Session.find({ participants: req.user.id, status: 'completed' }).select('startTime').sort({ startTime: -1 });
+  const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+  const sessions = await Session.find({ participants: req.user.id, status: 'completed', startTime: { $gte: oneYearAgo } }).select('startTime').sort({ startTime: -1 });
   const activityCounts = {};
   for (const s of sessions) {
     if (!s.startTime) continue;
@@ -36,8 +39,8 @@ async function getProfile(req, res) {
 async function updateProfile(req, res) {
   const username = typeof req.body.username === 'string' ? req.body.username.trim() : '';
 
-  if (!username || username.length < 3 || username.length > 30) {
-    return fail(res, 400, 'Username must be between 3 and 30 characters');
+  if (!username || username.length < 3 || username.length > 20) {
+    return fail(res, 400, 'Username must be between 3 and 20 characters');
   }
 
   const user = await User.findByIdAndUpdate(req.user.id, { username }, {
@@ -70,7 +73,7 @@ async function updateApiKey(req, res) {
     req.user.id,
     { apiKey },
     { new: true }
-  );
+  ).select('+apiKey');
 
   if (!user) {
     return fail(res, 404, 'User not found');
@@ -103,7 +106,7 @@ async function getUserSolvedProblems(req, res) {
 
     res.json({ solvedProblems, solvedSlugs: [...seen] });
   } catch (err) {
-    fail(res, 500, 'Failed to fetch solved problems');
+    return fail(res, 500, 'Failed to fetch solved problems');
   }
 }
 

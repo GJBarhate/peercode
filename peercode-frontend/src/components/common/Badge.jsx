@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { twMerge } from 'tailwind-merge'
 
 const variants = {
@@ -12,7 +13,7 @@ const variants = {
   blue: 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-400 border border-blue-300 dark:border-blue-700'
 }
 
-export default function Badge({ children, variant = 'default', className = '' }) {
+export default memo(function Badge({ children, variant = 'default', className = '' }) {
   return (
     <span className={twMerge(
       'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium',
@@ -22,4 +23,4 @@ export default function Badge({ children, variant = 'default', className = '' })
       {children}
     </span>
   )
-}
+})

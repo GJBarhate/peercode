@@ -78,7 +78,7 @@ module.exports = function defineSessionCompleteJob(agenda) {
           await agenda.now('send-email', {
             to: u.email,
             subject: 'Your PeerCode session has ended',
-            html: `<p>Hi ${u.username},</p><p>Your coding session in room <strong>${roomId}</strong> has ended. Duration: ${session ? Math.round((now - new Date(session.startTime || session.createdAt)) / 60) : 'N/A'} minutes.</p><p>Your AI debrief will be ready shortly.</p>`,
+            html: `<p>Hi ${u.username},</p><p>Your coding session in room <strong>${roomId}</strong> has ended. Duration: ${session ? Math.round((now - new Date(session.startTime || session.createdAt)) / 60000) : 'N/A'} minutes.</p><p>Your AI debrief will be ready shortly.</p>`,
           });
         }
       }

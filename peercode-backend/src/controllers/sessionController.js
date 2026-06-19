@@ -2,6 +2,7 @@
 
 const Session = require('../models/Session');
 const AiDebrief = require('../models/AiDebrief');
+const Snapshot = require('../models/Snapshot');
 const { agenda } = require('../config/agenda');
 const { computeDiffs } = require('../utils/diffEngine');
 const { ok: success, fail } = require('../utils/httpResponse');
@@ -12,6 +13,9 @@ async function getSession(req, res) {
   if (!session) {
     return fail(res, 404, 'Session not found');
   }
+  if (!session.participants.map(String).includes(req.user.id)) {
+    return fail(res, 403, 'Access denied');
+  }
   res.json(session);
 }
 
@@ -20,14 +24,50 @@ async function getPlayback(req, res) {
   if (!session) {
     return fail(res, 404, 'Session not found');
   }
-  const diffs = computeDiffs(session.snapshots || []);
-  res.json({ roomId: session.roomId, diffs });
+  if (!session.participants.map(String).includes(req.user.id)) {
+    return fail(res, 403, 'Access denied');
+  }
+
+  const rawSnaps = await Snapshot.find({ roomId: req.params.roomId })
+    .sort({ timestamp: 1 })
+    .lean();
+
+  if (!rawSnaps.length) {
+    return res.json({ roomId: session.roomId, diffs: [], snapshots: [], problemSnapshot: session.problemSnapshot });
+  }
+
+  const snapshots = rawSnaps.map((s, i) => {
+    const prev = rawSnaps[i - 1];
+    const isApproachRestart = i > 0 && prev &&
+      prev.code.length > 50 && s.code.length < prev.code.length * 0.3;
+    return {
+      code: s.code,
+      language: s.language || 'javascript',
+      timestamp: s.timestamp,
+      userId: s.userId,
+      isApproachRestart: isApproachRestart || false,
+    };
+  });
+
+  const diffs = computeDiffs(rawSnaps);
+  res.json({
+    roomId: session.roomId,
+    diffs,
+    snapshots,
+    problemSnapshot: session.problemSnapshot,
+    participants: session.participants,
+    duration: session.duration,
+    startTime: session.startTime,
+  });
 }
 
 async function endSession(req, res) {
   const session = await Session.findOne({ roomId: req.params.roomId });
   if (!session) {
     return fail(res, 404, 'Session not found');
+  }
+  if (!session.participants.map(String).includes(req.user.id)) {
+    return fail(res, 403, 'Access denied');
   }
 
   await agenda.now('session-complete', {
@@ -72,14 +112,14 @@ async function getDebrief(req, res) {
     improvements: debrief.areasToImprove || [],
     studyTopics: debrief.studyNext || [],
     tips: debrief.studyNext || [],
-    timeComplexity: debrief.weakTopics?.[0] || null,
-    spaceComplexity: debrief.weakTopics?.[1] || null,
+    timeComplexity: debrief.timeComplexity || null,
+    spaceComplexity: debrief.spaceComplexity || null,
     communication: debrief.scores?.communication || 0,
     problemDecomposition: debrief.scores?.decomposition || 0,
     codeQuality: debrief.scores?.codeQuality || 0,
     complexityAwareness: debrief.scores?.complexity || 0,
   };
-  success(res, merged, 'Debrief retrieved');
+  return success(res, merged, 'Debrief retrieved');
 }
 
 async function getAnalytics(req, res) {
@@ -151,10 +191,19 @@ async function getAnalytics(req, res) {
 
 async function getUserSessions(req, res) {
   try {
-    const sessions = await Session.find({ participants: req.user.id })
-      .populate('problem', 'title difficulty slug tags')
-      .sort({ createdAt: -1 })
-      .select('roomId participants createdAt duration endTime startTime ratingReceived problemTitle problem problemSnapshot status testResults eloData eloAtStart eloAtEnd eloDelta finalCode finalLanguage debrief');
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const skip = (page - 1) * limit;
+
+    const [sessions, total] = await Promise.all([
+      Session.find({ participants: req.user.id })
+        .populate('problem', 'title difficulty slug tags')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select('roomId participants createdAt duration endTime startTime problem problemSnapshot status testResults eloData eloAtStart eloAtEnd eloDelta finalCode finalLanguage debrief'),
+      Session.countDocuments({ participants: req.user.id }),
+    ]);
 
     const serializedSessions = sessions.map((session) => {
       const durationMinutes = session.duration != null
@@ -163,23 +212,27 @@ async function getUserSessions(req, res) {
           ? Math.max(0, Math.round((session.endTime - session.startTime) / 60000))
           : 0;
 
+      const existingSnap = session.problemSnapshot || {};
+      const hasValidTitle = existingSnap.title && existingSnap.title !== 'Unknown Problem';
       return {
         ...session.toObject(),
         durationMinutes,
-        // Ensure problemSnapshot has all needed fields
-        problemSnapshot: session.problemSnapshot || {
-          title: session.problem?.title || session.problemTitle || 'Unknown Problem',
-          difficulty: session.problem?.difficulty || 'unknown',
-          slug: session.problem?.slug || '',
-          tags: session.problem?.tags || []
+        problemSnapshot: {
+          title: hasValidTitle ? existingSnap.title : (session.problem?.title || session.problemTitle || 'Practice Session'),
+          difficulty: existingSnap.difficulty || session.problem?.difficulty || 'medium',
+          slug: existingSnap.slug || session.problem?.slug || '',
+          tags: existingSnap.tags?.length ? existingSnap.tags : (session.problem?.tags || []),
         }
       };
     });
     
-    res.json(serializedSessions);
+    res.json({
+      sessions: serializedSessions,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+    });
   } catch (err) {
     logger.error('Error fetching user sessions:', err);
-    fail(res, 500, 'Failed to fetch sessions');
+    return fail(res, 500, 'Failed to fetch sessions');
   }
 }
 

@@ -1,11 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { Search, Filter, X, LayoutGrid, List, CheckCircle, ArrowLeft, ArrowRight, Users } from 'lucide-react'
+import { Helmet } from 'react-helmet-async'
+import Fuse from 'fuse.js'
+import { Search, Filter, X, LayoutGrid, List, CheckCircle, Users, Shuffle } from 'lucide-react'
 import Navbar from '../components/common/Navbar'
 import Badge from '../components/common/Badge'
 import Skeleton from '../components/common/Skeleton'
+import Pagination from '../components/common/Pagination'
 import { getProblems, getProblemStats, getUserSolvedProblems } from '../services/api'
 import { useAuth } from '../context/AuthContext'
+import { useBookmarks } from '../hooks/useBookmarks'
+import { Bookmark, BookmarkCheck } from 'lucide-react'
 
 const PROBLEMS_PER_PAGE = 20
 const DIFFICULTIES = ['all', 'easy', 'medium', 'hard']
@@ -34,6 +39,7 @@ export default function ProblemsPage() {
 
   const [problemStats, setProblemStats] = useState({ total: 0, easy: 0, medium: 0, hard: 0 })
   const [solvedStats, setSolvedStats] = useState({ total: 0, easy: 0, medium: 0, hard: 0 })
+  const { toggle: toggleBookmark, isBookmarked } = useBookmarks()
 
   useEffect(() => {
     const params = {}
@@ -49,6 +55,7 @@ export default function ProblemsPage() {
   }, [viewMode])
 
   useEffect(() => {
+    const controller = new AbortController()
     async function load() {
       setIsLoading(true)
       setError(null)
@@ -60,16 +67,18 @@ export default function ProblemsPage() {
           ...(selectedCompanies.length > 0 && { companies: selectedCompanies.join(',') }),
           ...(tagSearch && { tags: tagSearch }),
         }
-        const { data } = await getProblems(params)
+        const { data } = await getProblems(params, controller.signal)
         setProblems(data.problems || [])
         setTotalProblems(data.total || 0)
       } catch (err) {
+        if (err.name === 'CanceledError' || err.name === 'AbortError') return
         setError(err.response?.data?.message || 'Failed to load problems')
       } finally {
-        setIsLoading(false)
+        if (!controller.signal.aborted) setIsLoading(false)
       }
     }
     load()
+    return () => controller.abort()
   }, [difficulty, tagSearch, selectedCompanies, currentPage])
 
   useEffect(() => {
@@ -82,7 +91,7 @@ export default function ProblemsPage() {
     if (!isAuthenticated) return
     getUserSolvedProblems()
       .then(({ data }) => {
-        setSolvedSlugs(new Set(data.solvedSlugs || []))
+        setSolvedSlugs(new Set(Array.isArray(data.solvedSlugs) ? data.solvedSlugs : []))
         const solvedList = data.solvedProblems || []
         const counts = { total: 0, easy: 0, medium: 0, hard: 0 }
         for (const p of solvedList) {
@@ -96,6 +105,23 @@ export default function ProblemsPage() {
       .catch(() => {})
   }, [isAuthenticated])
 
+  const [showBookmarked, setShowBookmarked] = useState(false)
+  const [localSearch, setLocalSearch] = useState('')
+
+  const fuse = useMemo(() => new Fuse(problems, {
+    keys: ['title', 'tags', 'slug'],
+    threshold: 0.35,
+    ignoreLocation: true,
+  }), [problems])
+
+  const fuzzyFiltered = useMemo(() => {
+    if (!localSearch.trim()) return problems
+    return fuse.search(localSearch).map(r => r.item)
+  }, [fuse, localSearch, problems])
+
+  const displayedProblems = showBookmarked
+    ? fuzzyFiltered.filter(p => isBookmarked(p.slug))
+    : fuzzyFiltered
   const totalPages = Math.ceil(totalProblems / PROBLEMS_PER_PAGE)
   const startItem = totalProblems === 0 ? 0 : (currentPage - 1) * PROBLEMS_PER_PAGE + 1
   const endItem = Math.min(currentPage * PROBLEMS_PER_PAGE, totalProblems)
@@ -118,12 +144,41 @@ export default function ProblemsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+      <Helmet>
+        <title>Problems — PeerCode</title>
+        <meta name="description" content="Browse and practice algorithmic coding problems. Filter by difficulty, tags, and companies." />
+      </Helmet>
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16">
 
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">Problems</h1>
-          <p className="text-gray-500 dark:text-gray-400">Browse and practice algorithmic problems</p>
+        <div className="mb-8 flex items-start justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-2">Problems</h1>
+            <p className="text-gray-500 dark:text-gray-400">Browse and practice algorithmic problems</p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setShowBookmarked(v => !v)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-[0.98] ${showBookmarked ? 'text-amber-900 bg-amber-400 hover:bg-amber-300' : 'text-gray-400 hover:text-white bg-white/5 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 hover:border-amber-400/50'}`}
+            >
+              {showBookmarked ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
+              {showBookmarked ? 'All Problems' : 'Bookmarked'}
+            </button>
+            {problems.length > 0 && (
+              <button
+                onClick={() => {
+                  const unsolvedProblems = problems.filter(p => !solvedSlugs.has(p.slug))
+                  const pool = unsolvedProblems.length > 0 ? unsolvedProblems : problems
+                  const pick = pool[Math.floor(Math.random() * pool.length)]
+                  if (pick?.slug) navigate(`/problems/${pick.slug}`)
+                }}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 transition-all active:scale-[0.98]"
+              >
+                <Shuffle className="w-4 h-4" />
+                Random
+              </button>
+            )}
+          </div>
         </div>
 
         {problemStats.total > 0 && (
@@ -199,20 +254,42 @@ export default function ProblemsPage() {
               ))}
             </div>
 
-            <div className="relative flex-1 max-w-sm">
+            <div className="relative flex-1 max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 dark:text-gray-500" aria-hidden="true" />
+              <input
+                type="text"
+                value={localSearch}
+                onChange={e => setLocalSearch(e.target.value)}
+                placeholder="Fuzzy search problems..."
+                data-search-input
+                aria-label="Fuzzy search problems"
+                className="w-full pl-9 pr-4 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-sm text-gray-700 dark:text-gray-200 placeholder-gray-500 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-50 dark:focus:ring-offset-gray-950"
+              />
+              {localSearch && (
+                <button
+                  onClick={() => setLocalSearch('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-500 hover:text-gray-300"
+                  aria-label="Clear search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <div className="relative flex-1 max-w-xs">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 dark:text-gray-500" aria-hidden="true" />
               <input
                 type="text"
                 value={tagSearch}
                 onChange={e => { setTagSearch(e.target.value); setCurrentPage(1) }}
-                placeholder="Search by tag..."
+                placeholder="Filter by tag..."
                 aria-label="Search problems by tag"
                 className="w-full pl-9 pr-4 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl text-sm text-gray-700 dark:text-gray-200 placeholder-gray-500 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:ring-offset-gray-50 dark:focus:ring-offset-gray-950"
               />
               {tagSearch && (
                 <button
                   onClick={() => { setTagSearch(''); setCurrentPage(1) }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-500 hover:text-gray-300"
                   aria-label="Clear tag search"
                 >
                   <X className="w-4 h-4" />
@@ -338,7 +415,7 @@ export default function ProblemsPage() {
         ) : error ? (
           <div className="text-center py-16">
             <p className="text-red-400 mb-4">{error}</p>
-            <button onClick={() => window.location.reload()} className="btn-secondary text-sm">
+            <button onClick={() => { setError(null); setCurrentPage(1) }} className="btn-secondary text-sm">
               Retry
             </button>
           </div>
@@ -367,24 +444,36 @@ export default function ProblemsPage() {
                 </tr>
               </thead>
               <tbody>
-                {problems.map((problem, idx) => {
+                {displayedProblems.map((problem, idx) => {
                   const globalIndex = (currentPage - 1) * PROBLEMS_PER_PAGE + idx + 1
                   const isSolved = solvedSlugs.has(problem.slug)
+                  const diffColor = problem.difficulty?.toLowerCase() === 'easy' ? 'hover:border-l-emerald-500'
+                    : problem.difficulty?.toLowerCase() === 'hard' ? 'hover:border-l-red-500'
+                    : 'hover:border-l-amber-500'
                   return (
                     <tr
                       key={problem._id || problem.id}
-                      className={`border-b border-gray-200/50 dark:border-gray-800/50 hover:border-l-2 hover:border-l-indigo-500 transition-colors ${
-                        idx % 2 === 0 ? 'bg-gray-50 dark:bg-[#11111f]' : 'bg-white dark:bg-[#0a0a14]'
+                      className={`group border-b border-gray-200/50 dark:border-gray-800/50 border-l-2 border-l-transparent hover:border-l-2 ${diffColor} hover:bg-indigo-50/30 dark:hover:bg-indigo-500/[0.04] transition-all duration-150 ${
+                        isSolved ? 'dark:bg-emerald-500/[0.02]' : idx % 2 === 0 ? 'bg-gray-50 dark:bg-[#11111f]' : 'bg-white dark:bg-[#0a0a14]'
                       }`}
                     >
                       <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-500">{globalIndex}</td>
                       <td className="px-4 py-3">
-                        <Link
-                          to={`/problems/${problem.slug}`}
-                          className="font-medium text-gray-900 dark:text-gray-100 hover:text-indigo-400 transition-colors"
-                        >
-                          {problem.title}
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => toggleBookmark(problem.slug)}
+                            className={`flex-shrink-0 transition-colors opacity-0 group-hover:opacity-100 ${isBookmarked(problem.slug) ? 'text-amber-400 opacity-100' : 'text-gray-500 hover:text-amber-400'}`}
+                            title={isBookmarked(problem.slug) ? 'Remove bookmark' : 'Bookmark'}
+                          >
+                            {isBookmarked(problem.slug) ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
+                          </button>
+                          <Link
+                            to={`/problems/${problem.slug}`}
+                            className="font-medium text-gray-900 dark:text-gray-100 hover:text-indigo-400 transition-colors"
+                          >
+                            {problem.title}
+                          </Link>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <Badge variant={problem.difficulty?.toLowerCase() || 'default'}>
@@ -418,15 +507,21 @@ export default function ProblemsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {problems.map(problem => {
+            {displayedProblems.map(problem => {
               const isSolved = solvedSlugs.has(problem.slug)
               return (
                 <div
                   key={problem._id || problem.id}
-                  className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-5 hover:border-gray-300 dark:hover:border-gray-700 transition-colors flex flex-col gap-3"
+                  className={`group bg-white dark:bg-gray-900 border rounded-xl p-5 flex flex-col gap-3 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg cursor-default ${
+                    problem.difficulty?.toLowerCase() === 'easy'
+                      ? 'border-gray-200 dark:border-gray-800 hover:border-emerald-400/40 dark:hover:border-emerald-500/30 hover:shadow-emerald-500/10'
+                      : problem.difficulty?.toLowerCase() === 'hard'
+                      ? 'border-gray-200 dark:border-gray-800 hover:border-red-400/40 dark:hover:border-red-500/30 hover:shadow-red-500/10'
+                      : 'border-gray-200 dark:border-gray-800 hover:border-amber-400/40 dark:hover:border-amber-500/30 hover:shadow-amber-500/10'
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <Link
                         to={`/problems/${problem.slug}`}
                         className="font-semibold text-gray-900 dark:text-gray-100 hover:text-indigo-400 transition-colors leading-tight"
@@ -440,9 +535,18 @@ export default function ProblemsPage() {
                         </span>
                       )}
                     </div>
-                    <Badge variant={problem.difficulty?.toLowerCase() || 'default'}>
-                      {problem.difficulty}
-                    </Badge>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleBookmark(problem.slug) }}
+                        className={`p-1 rounded transition-colors ${isBookmarked(problem.slug) ? 'text-amber-400' : 'text-gray-400 hover:text-amber-400'}`}
+                        title={isBookmarked(problem.slug) ? 'Remove bookmark' : 'Bookmark'}
+                      >
+                        {isBookmarked(problem.slug) ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
+                      </button>
+                      <Badge variant={problem.difficulty?.toLowerCase() || 'default'}>
+                        {problem.difficulty}
+                      </Badge>
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap gap-1.5">
@@ -453,12 +557,20 @@ export default function ProblemsPage() {
                     ))}
                   </div>
 
-                  {problem.acceptanceRate != null && (
-                    <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-500">
-                      <Users className="w-3 h-3" />
-                      <span>{problem.acceptanceRate}% acceptance</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-3 text-xs text-gray-600 dark:text-gray-500 flex-wrap">
+                    {problem.acceptanceRate != null && (
+                      <div className="flex items-center gap-1.5">
+                        <CheckCircle className="w-3 h-3" />
+                        <span>{problem.acceptanceRate}% accepted</span>
+                      </div>
+                    )}
+                    {problem.solvedCount > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <Users className="w-3 h-3" />
+                        <span>{problem.solvedCount} solved</span>
+                      </div>
+                    )}
+                  </div>
 
                   <button
                     onClick={() => handlePractice(problem)}
@@ -472,57 +584,14 @@ export default function ProblemsPage() {
           </div>
         )}
 
-        {totalPages > 1 && (
-          <div className="mt-6 flex items-center justify-between">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Showing <span className="font-medium text-gray-700 dark:text-gray-200">{startItem}</span>–<span className="font-medium text-gray-700 dark:text-gray-200">{endItem}</span> of <span className="font-medium text-gray-700 dark:text-gray-200">{totalProblems}</span> problems
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                Prev
-              </button>
-              <div className="flex items-center gap-1">
-                {Array.from({ length: totalPages }, (_, i) => i + 1)
-                  .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
-                  .reduce((acc, p, i, arr) => {
-                    if (i > 0 && p - arr[i - 1] > 1) acc.push('...')
-                    acc.push(p)
-                    return acc
-                  }, [])
-                  .map((p, i) =>
-                    p === '...' ? (
-                      <span key={`ellipsis-${i}`} className="px-2 text-gray-400 dark:text-gray-600 text-sm">...</span>
-                    ) : (
-                      <button
-                        key={p}
-                        onClick={() => setCurrentPage(p)}
-                        className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
-                          currentPage === p
-                            ? 'bg-indigo-600 text-white'
-                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
-                        }`}
-                      >
-                        {p}
-                      </button>
-                    )
-                  )}
-              </div>
-              <button
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                Next
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+          startItem={startItem}
+          endItem={endItem}
+          total={totalProblems}
+        />
       </div>
     </div>
   )

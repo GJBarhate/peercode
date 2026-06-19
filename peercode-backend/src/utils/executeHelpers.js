@@ -286,13 +286,162 @@ public class Main {
 `;
 }
 
+function wrapDesignProblem(code, language, langId) {
+  // Class-based problems: LRU Cache, Serialize/Deserialize Binary Tree, etc.
+  // Input format: ["method1","method2",...]\n[[arg1],[arg2],...]
+  // Output format: [result1, result2, ...]
+
+  if (langId === 93 || langId === 74) { // JavaScript / TypeScript
+    const tsPrefix = langId === 74
+      ? 'declare var require: any;\ndeclare var process: any;\nexport {};\n\n'
+      : '';
+    return tsPrefix + code + `
+
+const fs = require('fs');
+const input = fs.readFileSync(0, 'utf-8').trim();
+const lines = input.split('\\n');
+const methods = JSON.parse(lines[0]);
+const argsList = JSON.parse(lines[1]);
+const obj = new LRUCache(...argsList[0]);
+const results = [null];
+for (let i = 1; i < methods.length; i++) {
+  const result = obj[methods[i]](...argsList[i]);
+  results.push(result !== undefined && result !== null ? result : null);
+}
+console.log(JSON.stringify(results));
+`;
+  }
+
+  if (langId === 71) { // Python
+    return code + `
+
+import json, sys
+input_data = sys.stdin.read().strip()
+lines = input_data.split('\\n')
+methods = json.loads(lines[0])
+args = json.loads(lines[1])
+obj = LRUCache(*args[0])
+results = [None]
+for i in range(1, len(methods)):
+    result = getattr(obj, methods[i])(*args[i])
+    results.append(result)
+print(json.dumps(results))
+`;
+  }
+
+  if (langId === 62) { // Java
+    return `
+import java.util.*;
+import java.io.*;
+import java.lang.reflect.*;
+
+${code}
+
+public class Main {
+  public static void main(String[] args) throws Exception {
+    StringBuilder sb = new StringBuilder();
+    BufferedReader r = new BufferedReader(new InputStreamReader(System.in));
+    String l; while ((l = r.readLine()) != null) sb.append(l);
+    String input = sb.toString().trim();
+    String[] parts = input.split("\\n");
+    String[] methods = new com.google.gson.Gson().fromJson(parts[0], String[].class);
+    long[][] argsList = new com.google.gson.Gson().fromJson(parts[1], long[][].class);
+    // Can't parse without JSON library, fallback to simple approach
+    System.out.println("[]");
+  }
+}
+`;
+  }
+
+  if (langId === 106) { // Go
+    return `
+package main
+
+import (
+  "bufio"
+  "encoding/json"
+  "fmt"
+  "os"
+  "strings"
+)
+
+${code}
+
+func main() {
+  scanner := bufio.NewScanner(os.Stdin)
+  var input string
+  for scanner.Scan() { input += scanner.Text() }
+
+  parts := strings.SplitN(input, "\\n", 2)
+  if len(parts) < 2 { fmt.Print("[]"); return }
+
+  var methods []string
+  json.Unmarshal([]byte(parts[0]), &methods)
+
+  var rawArgs [][]json.Number
+  json.Unmarshal([]byte(parts[1]), &rawArgs)
+
+  cap := 0
+  if num, err := rawArgs[0][0].Int64(); err == nil { cap = int(num) }
+  cache := Constructor(cap)
+  results := make([]interface{}, len(methods))
+  results[0] = nil
+
+  for i := 1; i < len(methods); i++ {
+    switch methods[i] {
+    case "put":
+      key, _ := rawArgs[i][0].Int64()
+      val, _ := rawArgs[i][1].Int64()
+      cache.Put(int(key), int(val))
+      results[i] = nil
+    case "get":
+      key, _ := rawArgs[i][0].Int64()
+      results[i] = cache.Get(int(key))
+    }
+  }
+
+  b, _ := json.Marshal(results)
+  fmt.Print(string(b))
+}
+`;
+  }
+
+  if (langId === 54) { // C++
+    return `
+#include <bits/stdc++.h>
+using namespace std;
+${code}
+int main() {
+  string in, l; while (getline(cin, l)) in += l;
+  cout << "[]" << endl;
+  return 0;
+}
+`;
+  }
+
+  // Fallback for C
+  return code;
+}
+
 function wrapCodeForTest(code, language, functionName, hasSolutionClass) {
   const langId = getLanguageId(language);
   const fnName = functionName || 'solution';
 
+  // Special handling for class-based problems (LRU Cache, etc.)
+  const isDesignProblem = code.includes('class LRUCache') || code.includes('type LRUCache struct');
+
+  if (isDesignProblem) {
+    return wrapDesignProblem(code, language, langId);
+  }
+
   if (langId === 93 || langId === 74) {
+    // TypeScript needs type declarations for Node.js APIs
+    const tsPrefix = langId === 74
+      ? 'declare var require: any;\ndeclare var process: any;\nexport {};\n\n'
+      : '';
+    const callPrefix = langId === 74 ? '(' + fnName + ' as any)' : fnName;
     return `
-${code}
+${tsPrefix}${code}
 
 const fs = require('fs');
 const input = fs.readFileSync(0, 'utf-8').trim();
@@ -301,7 +450,7 @@ try {
   try { args = input ? JSON.parse(input) : []; }
   catch { args = input.split('\\n').map(l=>l.trim()).filter(l=>l).map(l=>{try{return JSON.parse(l);}catch{return isNaN(l)?l:Number(l);}}); }
   if (!Array.isArray(args)) args = [args];
-  const result = ${fnName}(...args);
+  const result = ${callPrefix}(...args);
   console.log(JSON.stringify(result));
 } catch (e) { console.error(e.message); process.exit(1); }
 `;
@@ -504,9 +653,6 @@ import (
   "encoding/json"
   "fmt"
   "os"
-  "reflect"
-  "strconv"
-  "strings"
 )
 
 ${code}
@@ -514,7 +660,7 @@ ${code}
 type JsonVal struct {
   val  interface{}
   arr  []JsonVal
-  typ  int // 0=null 1=bool 2=num 3=str 4=arr
+  typ  int
 }
 
 func parseJson(input string) JsonVal {
@@ -537,8 +683,14 @@ func toJsonVal(v interface{}) JsonVal {
   return JsonVal{}
 }
 
-func (j JsonVal) asInt() int { if j.typ == 2 { return j.val.(int) }; return 0 }
-func (j JsonVal) asStr() string { if j.typ == 3 { return j.val.(string) }; return "" }
+func (j JsonVal) asInt() int {
+  if j.typ == 2 { return j.val.(int) }
+  return 0
+}
+func (j JsonVal) asStr() string {
+  if j.typ == 3 { return j.val.(string) }
+  return ""
+}
 func (j JsonVal) asIntVec() []int {
   r := []int{}
   if j.typ == 4 { for _, v := range j.arr { r = append(r, v.asInt()) } }
@@ -607,8 +759,13 @@ function buildCodeFromHarness(problem, language, userCode, testInput) {
   if (!harness) return null;
   let code = harness;
   const placeholders = ['// __USER_CODE__', '# __USER_CODE__', '__USER_CODE__', '// USER_CODE_HERE', 'USER_CODE_HERE'];
+  let injected = false;
   for (const ph of placeholders) {
-    if (code.includes(ph)) { code = code.replace(ph, userCode); break; }
+    if (code.includes(ph)) { code = code.replace(ph, userCode); injected = true; break; }
+  }
+  // If harness lacks a user-code placeholder, fall back so we don't silently drop the user's solution
+  if (!injected) {
+    return null;
   }
   let escaped = testInput;
   if (language === 'java' || language === 'cpp') {
@@ -618,4 +775,4 @@ function buildCodeFromHarness(problem, language, userCode, testInput) {
   return code;
 }
 
-module.exports = { getLanguageId, extractFunctionName, wrapCodeForTest, buildCodeFromHarness };
+module.exports = { getLanguageId, extractFunctionName, wrapCodeForTest, buildCodeFromHarness, KNOWN_FUNCTIONS };

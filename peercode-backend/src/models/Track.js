@@ -38,4 +38,7 @@ const TrackSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+TrackSchema.index({ 'problems.problem': 1 });
+TrackSchema.index({ isActive: 1 });
+
 module.exports = mongoose.model('Track', TrackSchema);

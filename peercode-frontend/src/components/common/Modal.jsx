@@ -44,6 +44,7 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' })
                   </Dialog.Title>
                   <button
                     onClick={onClose}
+                    aria-label="Close"
                     className="p-1 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-colors"
                   >
                     <X className="w-5 h-5" />

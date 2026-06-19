@@ -10,10 +10,22 @@ export function useYjsEditor(roomId, socket, editorRef, onStuckDetected) {
   const boundEditor = useRef(false)
   const cleanupRef = useRef([])
 
-  if (!ydocRef.current) {
+  useEffect(() => {
     ydocRef.current = new Y.Doc()
     ytextRef.current = ydocRef.current.getText('code')
-  }
+    boundEditor.current = false
+    stuckNotified.current = false
+    lastEditTimestamp.current = Date.now()
+
+    return () => {
+      cleanupRef.current.forEach((dispose) => dispose())
+      cleanupRef.current = []
+      ydocRef.current?.destroy()
+      ydocRef.current = null
+      ytextRef.current = null
+      boundEditor.current = false
+    }
+  }, [roomId])
 
   useEffect(() => {
     if (!socket || !roomId || !ydocRef.current || !ytextRef.current) return
@@ -64,27 +76,55 @@ export function useYjsEditor(roomId, socket, editorRef, onStuckDetected) {
   const bindToMonaco = useCallback((editor) => {
     if (!editor || !ytextRef.current || boundEditor.current) return
     boundEditor.current = true
+    cleanupRef.current = []
+    let isRemoteUpdate = false
 
-    const syncEditor = () => {
-      const newCode = ytextRef.current.toString()
+    const syncEditor = (event) => {
       const model = editor.getModel()
-      if (model && model.getValue() !== newCode) {
-        model.setValue(newCode)
+      if (!model) return
+      isRemoteUpdate = true
+      const edits = []
+      let pos = 0
+      for (const op of event.delta) {
+        if (op.retain !== undefined) {
+          pos += op.retain
+        } else if (op.delete !== undefined) {
+          const start = model.getPositionAt(pos)
+          const end = model.getPositionAt(pos + op.delete)
+          edits.push({ range: { startLineNumber: start.lineNumber, startColumn: start.column, endLineNumber: end.lineNumber, endColumn: end.column }, text: '' })
+        } else if (typeof op.insert === 'string') {
+          const start = model.getPositionAt(pos)
+          edits.push({ range: { startLineNumber: start.lineNumber, startColumn: start.column, endLineNumber: start.lineNumber, endColumn: start.column }, text: op.insert })
+          pos += op.insert.length
+        }
       }
+      if (edits.length > 0) editor.executeEdits('yjs-sync', edits)
+      isRemoteUpdate = false
     }
 
     ytextRef.current.observe(syncEditor)
 
-    const contentDisposable = editor.onDidChangeModelContent(() => {
+    const contentDisposable = editor.onDidChangeModelContent((e) => {
+      if (isRemoteUpdate) return
       const model = editor.getModel()
       if (!model || !ydocRef.current || !ytextRef.current) return
-      const code = model.getValue()
-      if (ytextRef.current.toString() !== code) {
-        ydocRef.current.transact(() => {
-          ytextRef.current.delete(0, ytextRef.current.length)
-          ytextRef.current.insert(0, code)
-        })
-      }
+      ydocRef.current.transact(() => {
+        let adj = 0
+        for (const change of e.changes) {
+          const offset = model.getOffsetAt({
+            lineNumber: change.range.startLineNumber,
+            column: change.range.startColumn,
+          })
+          const delLen = change.rangeLength
+          if (delLen > 0) {
+            ytextRef.current.delete(offset + adj, delLen)
+          }
+          if (change.text) {
+            ytextRef.current.insert(offset + adj, change.text)
+          }
+          adj += (change.text?.length || 0) - delLen
+        }
+      })
     })
 
     cleanupRef.current.push(() => ytextRef.current?.unobserve(syncEditor))
@@ -103,17 +143,6 @@ export function useYjsEditor(roomId, socket, editorRef, onStuckDetected) {
 
     return () => clearInterval(interval)
   }, [onStuckDetected])
-
-  useEffect(() => {
-    return () => {
-      cleanupRef.current.forEach((dispose) => dispose())
-      cleanupRef.current = []
-      ydocRef.current?.destroy()
-      ydocRef.current = null
-      ytextRef.current = null
-      boundEditor.current = false
-    }
-  }, [])
 
   return { language, setLanguage, bindToMonaco }
 }

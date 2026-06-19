@@ -20,6 +20,7 @@ async function getDashboard(req, res) {
     const sessions = await Session.find({ participants: userId })
       .populate('problem', 'title difficulty slug tags')
       .sort({ createdAt: -1 })
+      .limit(50)
       .select('roomId participants createdAt duration endTime startTime status testResults eloAtStart eloAtEnd eloDelta problemSnapshot problem finalCode finalLanguage');
 
     // Calculate streak
@@ -35,12 +36,16 @@ async function getDashboard(req, res) {
       testResults: session.testResults,
       eloDelta: session.eloDelta || 0,
       eloAtEnd: session.eloAtEnd || user.elo,
-      problemSnapshot: session.problemSnapshot || {
-        title: session.problem?.title || 'Unknown Problem',
-        difficulty: session.problem?.difficulty || 'unknown',
-        slug: session.problem?.slug || '',
-        tags: session.problem?.tags || []
-      }
+      problemSnapshot: (() => {
+        const snap = session.problemSnapshot || {};
+        const valid = snap.title && snap.title !== 'Unknown Problem';
+        return {
+          title: valid ? snap.title : (session.problem?.title || 'Practice Session'),
+          difficulty: snap.difficulty || session.problem?.difficulty || 'medium',
+          slug: snap.slug || session.problem?.slug || '',
+          tags: snap.tags?.length ? snap.tags : (session.problem?.tags || []),
+        };
+      })()
     }));
 
     // Calculate stats
@@ -51,8 +56,15 @@ async function getDashboard(req, res) {
       ? Math.round(formattedSessions.reduce((sum, s) => sum + (s.duration || 0), 0) / totalSessions / 60)
       : 0;
 
+    // Build ELO history chart (last 90 data points)
+    const eloHistory = formattedSessions
+      .filter(s => s.eloAtEnd)
+      .slice(0, 90)
+      .reverse()
+      .map((s, i) => ({ index: i + 1, elo: s.eloAtEnd, date: s.createdAt }));
+
     // Return dashboard data
-    success(res, {
+    return success(res, {
       profile: {
         userId: user._id,
         username: user.username,
@@ -69,11 +81,12 @@ async function getDashboard(req, res) {
         passRate,
         avgDuration
       },
-      sessions: formattedSessions
+      sessions: formattedSessions,
+      eloHistory,
     }, 'Dashboard data retrieved');
   } catch (err) {
     logger.error('Dashboard error:', err);
-    fail(res, 500, 'Failed to load dashboard');
+    return fail(res, 500, 'Failed to load dashboard');
   }
 }
 

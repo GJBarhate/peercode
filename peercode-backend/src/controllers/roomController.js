@@ -53,7 +53,8 @@ async function getRoom(req, res) {
   if (!room) {
     room = await Room.findOne({ roomId: id })
       .populate('participants.user', 'username elo role')
-      .populate('problemId');
+      .populate('problemId')
+      .lean();
   }
 
   if (!room) {
@@ -137,4 +138,71 @@ async function deleteRoom(req, res) {
   res.json({ message: 'Room closed' });
 }
 
-module.exports = { createRoom, getRoom, joinRoom, deleteRoom };
+function generateInviteCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+async function createPrivateRoom(req, res) {
+  const { problemSlug, difficulty, isRanked = true, customTimeLimit } = req.body;
+  const roomId = uuidv4();
+
+  let inviteCode;
+  let attempts = 0;
+  do {
+    inviteCode = generateInviteCode();
+    attempts++;
+  } while (attempts < 5 && await Room.exists({ inviteCode }));
+
+  const roomData = {
+    roomId,
+    host: req.user.id,
+    participants: [{ user: req.user.id, role: 'interviewer', joinedAt: new Date() }],
+    isPrivate: true,
+    isRanked,
+    inviteCode,
+    customTimeLimit: customTimeLimit || undefined,
+  };
+
+  if (problemSlug) {
+    const problem = await Problem.findOne({ slug: problemSlug, isActive: true });
+    if (problem) roomData.problemId = problem._id;
+  } else if (difficulty) {
+    const count = await Problem.countDocuments({ isActive: true, difficulty });
+    if (count > 0) {
+      const random = Math.floor(Math.random() * count);
+      const problem = await Problem.findOne({ isActive: true, difficulty }).skip(random);
+      if (problem) roomData.problemId = problem._id;
+    }
+  }
+
+  const room = await Room.create(roomData);
+  res.status(201).json({
+    roomId: room.roomId,
+    inviteCode: room.inviteCode,
+    isRanked: room.isRanked,
+    customTimeLimit: room.customTimeLimit,
+  });
+}
+
+async function joinPrivateRoom(req, res) {
+  const { inviteCode } = req.params;
+  const room = await Room.findOne({ inviteCode: inviteCode.toUpperCase() })
+    .populate('problemId', 'title slug difficulty')
+    .lean();
+
+  if (!room) return fail(res, 404, 'Invalid invite code');
+  if (room.status === 'completed') return fail(res, 400, 'This room has ended');
+
+  res.json({
+    roomId: room.roomId,
+    problem: room.problemId,
+    isRanked: room.isRanked,
+    customTimeLimit: room.customTimeLimit,
+    participantCount: room.participants.length,
+  });
+}
+
+module.exports = { createRoom, getRoom, joinRoom, deleteRoom, createPrivateRoom, joinPrivateRoom };

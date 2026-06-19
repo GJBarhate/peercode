@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
+import { Helmet } from 'react-helmet-async'
 import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import axios from 'axios'
 import { API_BASE_URL, setAccessToken as setApiToken } from '../services/api'
@@ -8,6 +9,7 @@ import toast from 'react-hot-toast'
 
 export default function AuthCallbackPage() {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
   const { setAccessToken, setUser } = useAuth()
@@ -46,7 +48,7 @@ export default function AuthCallbackPage() {
           setStatus('success')
         }
         toast.success('Welcome to PeerCode!')
-        window.location.href = '/dashboard'
+        navigate('/dashboard', { replace: true })
       } catch (err) {
         const errorMsg = err.response?.data?.message || err.message || 'Google authentication failed'
         if (!cancelled) { setStatus('error'); setError(errorMsg) }
@@ -57,11 +59,14 @@ export default function AuthCallbackPage() {
     handleCallback()
 
     return () => { cancelled = true }
-  }, [searchParams, setAccessToken, setUser])
+  }, [searchParams, setAccessToken, setUser, navigate])
 
   if (status === 'loading') {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
+        <Helmet>
+          <title>Signing in... | PeerCode</title>
+        </Helmet>
         <div className="text-center space-y-4">
           <Loader2 className="w-12 h-12 text-indigo-500 dark:text-indigo-400 animate-spin mx-auto" />
           <p className="text-gray-600 dark:text-gray-400 text-lg">Completing sign in with Google...</p>
@@ -80,13 +85,13 @@ export default function AuthCallbackPage() {
           <p className="text-gray-600 dark:text-gray-400">{error || 'An unexpected error occurred.'}</p>
           <div className="flex gap-3 justify-center">
             <button
-              onClick={() => window.location.href = '/'}
+              onClick={() => navigate('/', { replace: true })}
               className="flex-1 px-4 py-3 rounded-xl font-semibold bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 transition-colors"
             >
               Back to Home
             </button>
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => navigate('/', { replace: true })}
               className="flex-1 px-4 py-3 rounded-xl font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
             >
               Try Again

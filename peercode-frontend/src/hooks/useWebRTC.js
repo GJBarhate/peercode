@@ -4,8 +4,11 @@ import toast from 'react-hot-toast'
 
 export function useWebRTC(roomId, socket, localStream) {
   const peers = useRef({})
+  const makingOffer = useRef({})
+  const pendingCandidates = useRef({})
   const [remoteStreams, setRemoteStreams] = useState({})
   const [peerMediaStates, setPeerMediaStates] = useState({})
+  const [connectionStates, setConnectionStates] = useState({})
   const [isScreenSharing, setIsScreenSharing] = useState(false)
   const localStreamRef = useRef(localStream)
   const screenShareStreamRef = useRef(null)
@@ -15,13 +18,23 @@ export function useWebRTC(roomId, socket, localStream) {
 
   localStreamRef.current = localStream
 
+  const flushCandidates = useCallback(async (peerId) => {
+    const pc = peers.current[peerId]
+    const queued = pendingCandidates.current[peerId]
+    if (!pc || !queued || queued.length === 0) return
+    pendingCandidates.current[peerId] = []
+    for (const candidate of queued) {
+      try { await pc.addIceCandidate(candidate) } catch (_) {}
+    }
+  }, [])
+
   const syncLocalStream = useCallback((stream) => {
     localStreamRef.current = stream
     if (!stream) return
     Object.values(peers.current).forEach(pc => {
-      const existingKinds = pc.getSenders().map(s => s.track?.kind)
+      const senderKinds = pc.getSenders().map(s => s.track?.kind)
       stream.getTracks().forEach(track => {
-        if (!existingKinds.includes(track.kind)) {
+        if (!senderKinds.includes(track.kind)) {
           try { pc.addTrack(track, stream) } catch (_) {}
         }
       })
@@ -29,21 +42,58 @@ export function useWebRTC(roomId, socket, localStream) {
   }, [])
 
   const replaceTrackForPeers = useCallback(async (kind, newTrack) => {
-    for (const pc of Object.values(peers.current)) {
-      const sender = pc.getSenders().find(s => s.track?.kind === kind)
+    const renegotiatePeers = []
+    for (const [peerId, pc] of Object.entries(peers.current)) {
+      let sender = pc.getSenders().find(s => s.track?.kind === kind)
+      if (!sender) {
+        sender = pc.getSenders().find(s => !s.track && s.transport)
+      }
       if (sender) {
-        try { await sender.replaceTrack(newTrack) } catch (_) {}
+        try {
+          await sender.replaceTrack(newTrack)
+        } catch (err) {
+          console.warn('[WebRTC] replaceTrack failed, adding new track:', err.message)
+          try {
+            const stream = screenShareStreamRef.current || localStreamRef.current
+            pc.addTrack(newTrack, stream)
+            renegotiatePeers.push(peerId)
+          } catch (_) {}
+        }
+      } else {
+        try {
+          const stream = screenShareStreamRef.current || localStreamRef.current
+          pc.addTrack(newTrack, stream)
+          renegotiatePeers.push(peerId)
+        } catch (_) {}
       }
     }
-  }, [])
+    // Renegotiate when we added new tracks
+    for (const peerId of renegotiatePeers) {
+      const pc = peers.current[peerId]
+      if (!pc) continue
+      try {
+        makingOffer.current[peerId] = true
+        const offer = await pc.createOffer()
+        await pc.setLocalDescription(offer)
+        if (socket) socket.emit('offer', { to: peerId, sdp: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } })
+      } catch (err) {
+        console.warn('[WebRTC] renegotiation after addTrack failed:', err.message)
+      } finally {
+        makingOffer.current[peerId] = false
+      }
+    }
+  }, [socket])
 
   const createPeerConnection = useCallback((peerId) => {
     if (peers.current[peerId]) return peers.current[peerId]
 
     const pc = new RTCPeerConnection(rtcConfig)
+    pendingCandidates.current[peerId] = []
 
     if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => pc.addTrack(track, localStreamRef.current))
+      localStreamRef.current.getTracks().forEach(track => {
+        try { pc.addTrack(track, localStreamRef.current) } catch (_) {}
+      })
     }
 
     pc.onicecandidate = (event) => {
@@ -53,14 +103,31 @@ export function useWebRTC(roomId, socket, localStream) {
     }
 
     pc.ontrack = (event) => {
-      const [stream] = event.streams
-      if (stream) {
-        setRemoteStreams(prev => ({ ...prev, [peerId]: stream }))
+      let stream = event.streams?.[0]
+      if (!stream) {
+        stream = new MediaStream([event.track])
       }
+      setRemoteStreams(prev => {
+        const existing = prev[peerId]
+        if (existing && event.track) {
+          const hasTrack = existing.getTracks().some(t => t.id === event.track.id)
+          if (!hasTrack) {
+            existing.addTrack(event.track)
+            return { ...prev, [peerId]: existing }
+          }
+          return prev
+        }
+        return { ...prev, [peerId]: stream }
+      })
     }
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+      const state = pc.connectionState
+      setConnectionStates(prev => ({ ...prev, [peerId]: state }))
+      if (state === 'failed') {
+        pc.restartIce()
+      }
+      if (state === 'closed') {
         setRemoteStreams(prev => {
           const next = { ...prev }
           delete next[peerId]
@@ -69,12 +136,15 @@ export function useWebRTC(roomId, socket, localStream) {
       }
     }
 
-    pc.onnegotiationneeded = async () => {
-      try {
-        const offer = await pc.createOffer()
-        await pc.setLocalDescription(offer)
-        if (socket) socket.emit('offer', { to: peerId, sdp: offer })
-      } catch (_) {}
+    pc.oniceconnectionstatechange = () => {
+      const state = pc.iceConnectionState
+      if (state === 'connected' || state === 'completed') {
+        setConnectionStates(prev => ({ ...prev, [peerId]: 'connected' }))
+      } else if (state === 'disconnected') {
+        setConnectionStates(prev => ({ ...prev, [peerId]: 'reconnecting' }))
+      } else if (state === 'failed') {
+        setConnectionStates(prev => ({ ...prev, [peerId]: 'failed' }))
+      }
     }
 
     peers.current[peerId] = pc
@@ -83,9 +153,11 @@ export function useWebRTC(roomId, socket, localStream) {
 
   const refreshRemoteStreamsForPeers = useCallback(() => {
     for (const [peerId, pc] of Object.entries(peers.current)) {
-      const videoReceiver = pc.getReceivers().find(r => r.track?.kind === 'video')
-      if (videoReceiver && videoReceiver.track && videoReceiver.track.readyState !== 'ended') {
-        setRemoteStreams(prev => ({ ...prev, [peerId]: new MediaStream([videoReceiver.track]) }))
+      const tracks = pc.getReceivers()
+        .map(r => r.track)
+        .filter(t => t && t.readyState !== 'ended')
+      if (tracks.length > 0) {
+        setRemoteStreams(prev => ({ ...prev, [peerId]: new MediaStream(tracks) }))
       }
     }
   }, [])
@@ -101,17 +173,28 @@ export function useWebRTC(roomId, socket, localStream) {
     }
 
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true })
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
       screenShareStreamRef.current = stream
       isScreenSharingRef.current = true
       setIsScreenSharing(true)
 
       const videoTrack = stream.getVideoTracks()[0]
-      if (videoTrack) {
-        await replaceTrackForPeers('video', videoTrack)
-        // Force a new stream object on remote side so the video element re-renders
-        refreshRemoteStreamsForPeers()
+      const audioTrack = stream.getAudioTracks()[0]
+      if (videoTrack) await replaceTrackForPeers('video', videoTrack)
+      if (audioTrack) await replaceTrackForPeers('audio', audioTrack)
+
+      // Force renegotiation so receivers re-bind to the new screen track
+      for (const [peerId, pc] of Object.entries(peers.current)) {
+        try {
+          makingOffer.current[peerId] = true
+          const offer = await pc.createOffer({ iceRestart: false })
+          await pc.setLocalDescription(offer)
+          if (socket) socket.emit('offer', { to: peerId, sdp: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } })
+        } catch (_) {} finally {
+          makingOffer.current[peerId] = false
+        }
       }
+      refreshRemoteStreamsForPeers()
 
       if (socket && roomId) {
         socket.emit('screen-share-started', { roomId })
@@ -131,10 +214,10 @@ export function useWebRTC(roomId, socket, localStream) {
 
     if (localStreamRef.current) {
       const cameraTrack = localStreamRef.current.getVideoTracks()[0]
-      if (cameraTrack) {
-        await replaceTrackForPeers('video', cameraTrack)
-        refreshRemoteStreamsForPeers()
-      }
+      const micTrack = localStreamRef.current.getAudioTracks()[0]
+      if (cameraTrack) await replaceTrackForPeers('video', cameraTrack)
+      if (micTrack) await replaceTrackForPeers('audio', micTrack)
+      refreshRemoteStreamsForPeers()
     }
 
     if (socket && roomId) {
@@ -145,8 +228,11 @@ export function useWebRTC(roomId, socket, localStream) {
   const hangUp = useCallback(() => {
     Object.values(peers.current).forEach(p => p.close())
     peers.current = {}
+    makingOffer.current = {}
+    pendingCandidates.current = {}
     setRemoteStreams({})
     setPeerMediaStates({})
+    setConnectionStates({})
     if (screenShareStreamRef.current) {
       screenShareStreamRef.current.getTracks().forEach(t => t.stop())
       screenShareStreamRef.current = null
@@ -165,44 +251,88 @@ export function useWebRTC(roomId, socket, localStream) {
     if (!socket) return
 
     const onUserJoined = async ({ socketId }) => {
-      const pc = createPeerConnection(socketId)
-      if (pc.connectionState === 'new') {
+      try {
+        const pc = createPeerConnection(socketId)
+        makingOffer.current[socketId] = true
         const offer = await pc.createOffer()
         await pc.setLocalDescription(offer)
-        socket.emit('offer', { to: socketId, sdp: offer })
+        socket.emit('offer', { to: socketId, sdp: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } })
+      } catch (err) {
+        console.warn('[WebRTC] offer creation failed:', err.message)
+      } finally {
+        makingOffer.current[socketId] = false
       }
     }
 
     const onOffer = async ({ from, sdp }) => {
-      const pc = createPeerConnection(from)
-      await pc.setRemoteDescription(new RTCSessionDescription(sdp))
-      const answer = await pc.createAnswer()
-      await pc.setLocalDescription(answer)
-      socket.emit('answer', { to: from, sdp: answer })
+      try {
+        let pc = peers.current[from]
+        if (!pc) {
+          pc = createPeerConnection(from)
+        }
+
+        const offerCollision = makingOffer.current[from] || pc.signalingState !== 'stable'
+        const isPolite = socket.id < from
+        if (offerCollision && !isPolite) {
+          return
+        }
+
+        if (pc.signalingState === 'have-local-offer') {
+          await pc.setLocalDescription({ type: 'rollback' })
+        }
+
+        await pc.setRemoteDescription(new RTCSessionDescription(sdp))
+        await flushCandidates(from)
+        const answer = await pc.createAnswer()
+        await pc.setLocalDescription(answer)
+        socket.emit('answer', { to: from, sdp: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } })
+      } catch (err) {
+        console.warn('[WebRTC] onOffer error:', err.message)
+      }
     }
 
     const onAnswer = async ({ from, sdp }) => {
-      const pc = peers.current[from]
-      if (pc) await pc.setRemoteDescription(new RTCSessionDescription(sdp))
+      try {
+        const pc = peers.current[from]
+        if (!pc) return
+        if (pc.signalingState !== 'have-local-offer') return
+        await pc.setRemoteDescription(new RTCSessionDescription(sdp))
+        await flushCandidates(from)
+      } catch (err) {
+        console.warn('[WebRTC] onAnswer error:', err.message)
+      }
     }
 
     const onIceCandidate = async ({ from, candidate }) => {
+      if (!candidate) return
       const pc = peers.current[from]
-      if (pc && candidate) {
-        try { await pc.addIceCandidate(new RTCIceCandidate(candidate)) } catch (_) {}
+      if (!pc || !pc.remoteDescription || !pc.remoteDescription.type) {
+        if (!pendingCandidates.current[from]) pendingCandidates.current[from] = []
+        pendingCandidates.current[from].push(new RTCIceCandidate(candidate))
+        return
       }
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate))
+      } catch (_) {}
     }
 
     const onUserLeft = ({ socketId }) => {
       const pc = peers.current[socketId]
       if (pc) pc.close()
       delete peers.current[socketId]
+      delete makingOffer.current[socketId]
+      delete pendingCandidates.current[socketId]
       setRemoteStreams(prev => {
         const next = { ...prev }
         delete next[socketId]
         return next
       })
       setPeerMediaStates(prev => {
+        const next = { ...prev }
+        delete next[socketId]
+        return next
+      })
+      setConnectionStates(prev => {
         const next = { ...prev }
         delete next[socketId]
         return next
@@ -221,8 +351,7 @@ export function useWebRTC(roomId, socket, localStream) {
         ...prev,
         [socketId]: { ...prev[socketId], isScreenSharing: true }
       }))
-      // Force refresh remote stream to pick up the replaced track
-      refreshRemoteStreamsForPeers()
+      setTimeout(() => refreshRemoteStreamsForPeers(), 300)
     }
 
     const onScreenShareStopped = ({ socketId }) => {
@@ -230,8 +359,7 @@ export function useWebRTC(roomId, socket, localStream) {
         ...prev,
         [socketId]: { ...prev[socketId], isScreenSharing: false }
       }))
-      // Force refresh remote stream to restore camera track
-      refreshRemoteStreamsForPeers()
+      setTimeout(() => refreshRemoteStreamsForPeers(), 300)
     }
 
     socket.on('participant-joined', onUserJoined)
@@ -254,21 +382,30 @@ export function useWebRTC(roomId, socket, localStream) {
       socket.off('screen-share-stopped', onScreenShareStopped)
       Object.values(peers.current).forEach(p => p.close())
       peers.current = {}
+      makingOffer.current = {}
+      pendingCandidates.current = {}
       setRemoteStreams({})
       setPeerMediaStates({})
+      setConnectionStates({})
     }
-  }, [socket, createPeerConnection, refreshRemoteStreamsForPeers])
+  }, [socket, createPeerConnection, refreshRemoteStreamsForPeers, flushCandidates])
 
   useEffect(() => {
     return () => { hangUpRef.current() }
   }, [])
 
   const createOffer = useCallback(async (peerId) => {
-    const pc = createPeerConnection(peerId)
-    const offer = await pc.createOffer()
-    await pc.setLocalDescription(offer)
-    if (socket) socket.emit('offer', { to: peerId, sdp: offer })
+    try {
+      const pc = createPeerConnection(peerId)
+      makingOffer.current[peerId] = true
+      const offer = await pc.createOffer()
+      await pc.setLocalDescription(offer)
+      if (socket) socket.emit('offer', { to: peerId, sdp: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } })
+    } catch (_) {
+    } finally {
+      makingOffer.current[peerId] = false
+    }
   }, [createPeerConnection, socket])
 
-  return { remoteStreams, peerMediaStates, isScreenSharing, createOffer, hangUp, startScreenShare, stopScreenShare, syncLocalStream }
+  return { remoteStreams, peerMediaStates, connectionStates, isScreenSharing, createOffer, hangUp, startScreenShare, stopScreenShare, syncLocalStream }
 }

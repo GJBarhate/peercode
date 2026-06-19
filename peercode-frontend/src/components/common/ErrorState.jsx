@@ -1,6 +1,7 @@
+import { memo } from 'react'
 import { AlertCircle, RefreshCw, Home } from 'lucide-react'
 
-export default function ErrorState({ 
+export default memo(function ErrorState({ 
   error, 
   onRetry, 
   onGoHome, 
@@ -49,4 +50,4 @@ export default function ErrorState({
       </div>
     </div>
   )
-}
+})

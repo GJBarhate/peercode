@@ -23,6 +23,7 @@ function playAlert() {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15)
     osc.start(ctx.currentTime)
     osc.stop(ctx.currentTime + 0.15)
+    osc.onended = () => ctx.close()
   } catch (_) {}
 }
 
@@ -180,7 +181,7 @@ export default function InterviewTimer({ isInterviewer, onPhaseChange, onTimerEn
     return `${m}:${sec.toString().padStart(2, '0')}`
   }
 
-  const circumference = 2 * Math.PI * 30
+  const circumference = 2 * Math.PI * 12
   const progress = timeLeft / phaseDuration
   const dashOffset = circumference * (1 - progress)
   

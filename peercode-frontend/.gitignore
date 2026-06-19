@@ -1,31 +1,56 @@
-# Dependencies
+# ── Dependencies ─────────────────────────────────────────────────────
 node_modules/
 
-# Build outputs
+# ── Build outputs ────────────────────────────────────────────────────
 dist/
 build/
+.vite/
 
-# Environment files
+# ── Vite cache ───────────────────────────────────────────────────────
+.cache/
+vite.config.js.timestamp-*
+
+# ── Environment variables ────────────────────────────────────────────
 .env
 .env.local
-.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# IDE
+# ── Editor / IDE ────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
 
-# OS
+# ── OS ───────────────────────────────────────────────────────────────
 .DS_Store
+.DS_Store?
+._*
 Thumbs.db
+desktop.ini
+ehthumbs.db
 
-# Logs
+# ── Logs ─────────────────────────────────────────────────────────────
 *.log
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# Test coverage
+# ── Test coverage ────────────────────────────────────────────────────
 coverage/
+.nyc_output/
 
-# Vite
-.cache/
+# ── Lock files (keep npm, ignore others) ────────────────────────────
+yarn.lock
+pnpm-lock.yaml
+
+# ── Misc ─────────────────────────────────────────────────────────────
+*.local
+*.tmp
+*.temp

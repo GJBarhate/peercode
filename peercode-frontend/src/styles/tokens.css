@@ -1,0 +1,62 @@
+:root {
+  /* Backgrounds */
+  --color-bg-base:       #0A0B0F;
+  --color-bg-surface:    #111318;
+  --color-bg-elevated:   #1A1D25;
+  --color-bg-overlay:    #21252E;
+
+  /* Borders */
+  --color-border-subtle:  rgba(255,255,255,0.06);
+  --color-border-default: rgba(255,255,255,0.12);
+  --color-border-strong:  rgba(255,255,255,0.24);
+
+  /* Brand */
+  --color-brand:         #6366F1;
+  --color-brand-hover:   #818CF8;
+  --color-brand-accent:  #22D3EE;
+
+  /* Semantic States */
+  --color-success:  #10B981;
+  --color-warning:  #F59E0B;
+  --color-error:    #EF4444;
+  --color-info:     #3B82F6;
+
+  /* Typography */
+  --font-display: 'Cal Sans', 'Inter', sans-serif;
+  --font-body:    'Inter', sans-serif;
+  --font-mono:    'JetBrains Mono', 'Fira Code', monospace;
+
+  /* Type Scale */
+  --text-xs:   0.75rem;
+  --text-sm:   0.875rem;
+  --text-base: 1rem;
+  --text-lg:   1.125rem;
+  --text-xl:   1.25rem;
+  --text-2xl:  1.5rem;
+  --text-3xl:  1.875rem;
+  --text-4xl:  2.25rem;
+  --text-hero: 3.5rem;
+
+  /* Spacing */
+  --space-1: 4px;   --space-2: 8px;   --space-3: 12px;  --space-4: 16px;
+  --space-5: 20px;  --space-6: 24px;  --space-8: 32px;  --space-10: 40px;
+  --space-12: 48px; --space-16: 64px; --space-20: 80px;
+
+  /* Elevation */
+  --shadow-sm:        0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md:        0 4px 16px rgba(0,0,0,0.5);
+  --shadow-lg:        0 8px 32px rgba(0,0,0,0.6);
+  --shadow-glow:      0 0 24px rgba(99,102,241,0.35);
+  --shadow-glow-cyan: 0 0 20px rgba(34,211,238,0.25);
+
+  /* Border Radius */
+  --radius-sm:   6px;  --radius-md: 10px;
+  --radius-lg:  16px;  --radius-xl: 24px;  --radius-full: 9999px;
+
+  /* Motion */
+  --duration-fast:   120ms;
+  --duration-normal: 200ms;
+  --duration-slow:   350ms;
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Lightbulb, Code2, RefreshCw, ChevronDown, ChevronUp, Sparkles } from 'lucide-react'
+import toast from 'react-hot-toast'
 import Spinner from '../common/Spinner'
 import { useGemini } from '../../hooks/useGemini'
 import { useGeminiContext } from '../../context/GeminiContext'
@@ -11,7 +12,7 @@ export default function AIHintPanel({ code, language, problem }) {
 
   const handleGetHint = () => {
     if (!problem?.description && !problem?.title) {
-      alert('Please select a problem first')
+      toast.error('Please select a problem first')
       return
     }
     fetchHint({
@@ -23,11 +24,11 @@ export default function AIHintPanel({ code, language, problem }) {
 
   const handleAnalyze = () => {
     if (!code?.trim()) {
-      alert('Please write some code first')
+      toast.error('Please write some code first')
       return
     }
     if (!problem?.description && !problem?.title) {
-      alert('Please select a problem first')
+      toast.error('Please select a problem first')
       return
     }
     fetchAnalysis({

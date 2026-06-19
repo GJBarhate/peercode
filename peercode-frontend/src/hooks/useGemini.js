@@ -24,7 +24,7 @@ export function useGemini() {
       setHint(data.hint)
       return data.hint
     } catch (err) {
-      console.error('Hint error:', err)
+      // hint error handled via toast
       const msg = err.response?.data?.error || err.response?.data?.message || 'Failed to get hint'
       toast.error(msg)
       return null
@@ -53,7 +53,7 @@ export function useGemini() {
       setAnalysis(data)
       return data
     } catch (err) {
-      console.error('Analysis error:', err)
+      // analysis error handled via toast
       const msg = err.response?.data?.error || err.response?.data?.message || 'Failed to analyze code'
       toast.error(msg)
       return null
@@ -67,7 +67,7 @@ export function useGemini() {
       const { data } = await generateQuestion({ topic, difficulty })
       return data
     } catch (err) {
-      console.error('Generate question error:', err)
+      // question generation error handled via toast
       const msg = err.response?.data?.error || err.response?.data?.message || 'Failed to generate question'
       toast.error(msg)
       return null

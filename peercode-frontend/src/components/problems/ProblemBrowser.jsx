@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Search, X, Filter } from 'lucide-react'
 import { getProblems } from '../../services/api'
 import Skeleton from '../common/Skeleton'
@@ -10,30 +10,29 @@ export default function ProblemBrowser({ onSelectProblem, onClose }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [difficulty, setDifficulty] = useState('all')
   const [page, setPage] = useState(1)
+  const [error, setError] = useState(null)
 
-  useEffect(() => {
-    loadProblems()
-  }, [searchQuery, difficulty, page])
-
-  const loadProblems = async () => {
+  const loadProblems = useCallback(async () => {
     setIsLoading(true)
+    setError(null)
     try {
-      const filters = {
-        limit: 20,
-        page
-      }
+      const filters = { limit: 20, page }
       if (searchQuery) filters.search = searchQuery
       if (difficulty !== 'all') filters.difficulty = difficulty
 
       const { data } = await getProblems(filters)
       setProblems(data.problems || data || [])
     } catch (err) {
-      console.error('Failed to load problems:', err)
+      setError(err.response?.data?.message || 'Failed to load problems')
       setProblems([])
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [searchQuery, difficulty, page])
+
+  useEffect(() => {
+    loadProblems()
+  }, [loadProblems])
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -93,6 +92,13 @@ export default function ProblemBrowser({ onSelectProblem, onClose }) {
           {isLoading ? (
             <div className="space-y-3 p-4">
               {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-14 w-full" />)}
+            </div>
+          ) : error ? (
+            <div className="flex flex-col items-center justify-center h-40 gap-3 p-4">
+              <p className="text-red-400 text-sm">{error}</p>
+              <button onClick={loadProblems} className="text-xs text-indigo-400 hover:text-indigo-300 underline">
+                Try again
+              </button>
             </div>
           ) : problems.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 gap-2">

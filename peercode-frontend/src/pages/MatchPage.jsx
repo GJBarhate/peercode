@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { Helmet } from 'react-helmet-async'
 import { useAuth } from '../context/AuthContext'
 import { Navigate } from 'react-router-dom'
 import Navbar from '../components/common/Navbar'
@@ -21,6 +22,10 @@ export default function MatchPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+      <Helmet>
+        <title>Find a Partner | PeerCode</title>
+        <meta name="description" content="Match with a coding partner for practice sessions" />
+      </Helmet>
       <Navbar />
       <main className="max-w-3xl mx-auto px-4 py-8">
         <div className="mb-8">

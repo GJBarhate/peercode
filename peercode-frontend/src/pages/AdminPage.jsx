@@ -1,10 +1,14 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, Bar } from 'recharts'
+import { Helmet } from 'react-helmet-async'
+import Papa from 'papaparse'
+import FocusTrap from 'focus-trap-react'
 import {
   Activity,
   AlertTriangle,
   Ban,
   CheckCircle2,
+  Download,
   FileCode2,
   Flag,
   LayoutDashboard,
@@ -25,6 +29,8 @@ import {
 } from 'lucide-react'
 import Navbar from '../components/common/Navbar'
 import Skeleton from '../components/common/Skeleton'
+import StatCard from '../components/common/StatCard'
+import EmptyState from '../components/common/EmptyState'
 import {
   getAdminProblems,
   getAdminReports,
@@ -48,40 +54,6 @@ const tabs = [
   { id: 'reports', label: 'Reports', icon: Flag },
 ]
 
-function StatCard({ label, value, detail, icon: Icon, tone = 'indigo' }) {
-  const tones = {
-    indigo: 'text-indigo-700 dark:text-indigo-300 bg-indigo-100 dark:bg-indigo-500/10 border-indigo-200 dark:border-indigo-500/20',
-    green: 'text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20',
-    amber: 'text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20',
-    purple: 'text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-500/10 border-purple-200 dark:border-purple-500/20',
-    pink: 'text-pink-700 dark:text-pink-300 bg-pink-100 dark:bg-pink-500/10 border-pink-200 dark:border-pink-500/20',
-    red: 'text-red-700 dark:text-red-300 bg-red-100 dark:bg-red-500/10 border-red-200 dark:border-red-500/20',
-  }
-
-  return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-500">{label}</p>
-          <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-gray-100">{value}</p>
-          {detail && <p className="mt-1 text-xs text-gray-600 dark:text-gray-500">{detail}</p>}
-        </div>
-        <div className={`p-2.5 rounded-lg border ${tones[tone]}`}>
-          <Icon className="w-5 h-5" />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function EmptyState({ title, body }) {
-  return (
-    <div className="py-14 text-center">
-      <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">{title}</p>
-      <p className="mt-1 text-sm text-gray-600 dark:text-gray-500">{body}</p>
-    </div>
-  )
-}
 
 export default function AdminPage() {
   const [activeTab, setActiveTab] = useState('overview')
@@ -95,28 +67,29 @@ export default function AdminPage() {
   const [error, setError] = useState(null)
   const [showProblemModal, setShowProblemModal] = useState(false)
   const [editProblem, setEditProblem] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
 
   async function loadAdminData() {
     setLoading(true)
     setError(null)
-    try {
-      const [statsRes, usersRes, problemsRes, reportsRes] = await Promise.all([
-        getAdminStats(),
-        getAdminUsers({ limit: 50, search: search || undefined }),
-        getAdminProblems(),
-        getAdminReports(),
-      ])
-      setStats(statsRes.data)
-      setUsers(usersRes.data.users || [])
-      setProblems(problemsRes.data || [])
-      setReports(reportsRes.data || [])
-    } catch (err) {
-      const message = getErrorMessage(err, 'Failed to load admin dashboard')
-      setError(message)
-      logger.error('Failed to load admin dashboard:', err)
-    } finally {
-      setLoading(false)
-    }
+    const [statsResult, usersResult, problemsResult, reportsResult] = await Promise.allSettled([
+      getAdminStats(),
+      getAdminUsers({ limit: 50, search: search || undefined }),
+      getAdminProblems(),
+      getAdminReports(),
+    ])
+    if (statsResult.status === 'fulfilled') setStats(statsResult.value.data)
+    else logger.error('Failed to load stats:', statsResult.reason)
+    if (usersResult.status === 'fulfilled') setUsers(usersResult.value.data.users || [])
+    else logger.error('Failed to load users:', usersResult.reason)
+    if (problemsResult.status === 'fulfilled') setProblems(problemsResult.value.data || [])
+    else logger.error('Failed to load problems:', problemsResult.reason)
+    if (reportsResult.status === 'fulfilled') setReports(reportsResult.value.data || [])
+    else logger.error('Failed to load reports:', reportsResult.reason)
+
+    const anyFailed = [statsResult, usersResult, problemsResult, reportsResult].some(r => r.status === 'rejected')
+    if (anyFailed) setError('Some data failed to load — showing partial results')
+    setLoading(false)
   }
 
   useEffect(() => {
@@ -142,6 +115,8 @@ export default function AdminPage() {
         .some(value => value.toLowerCase().includes(query))
     )
   }, [reports, search])
+
+  const paidUsers = useMemo(() => users.filter(u => u.subscription?.plan && u.subscription.plan !== 'free'), [users])
 
   const sessionChart = stats?.sessionsPerDay || []
   const difficultyChart = useMemo(() => {
@@ -188,6 +163,42 @@ export default function AdminPage() {
     loadAdminData()
   }
 
+  const exportCSV = useCallback((dataArray, filename) => {
+    if (!dataArray?.length) return toast.error('No data to export')
+    const csv = Papa.unparse(dataArray)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${filename}_${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+    toast.success(`Exported ${dataArray.length} rows`)
+  }, [])
+
+  const exportUsers = useCallback(() => {
+    exportCSV(users.map(u => ({
+      Username: u.username,
+      Email: u.email,
+      Role: u.role,
+      ELO: u.elo || 1200,
+      Plan: u.subscription?.plan || 'free',
+      Status: u.isBanned ? 'Banned' : 'Active',
+      Sessions: u.sessionCount || 0,
+      Joined: u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '',
+    })), 'peercode_users')
+  }, [users, exportCSV])
+
+  const exportProblems = useCallback(() => {
+    exportCSV(problems.map(p => ({
+      Title: p.title,
+      Slug: p.slug,
+      Difficulty: p.difficulty,
+      Status: p.isActive ? 'Active' : 'Archived',
+      Tags: (p.tags || []).join(', '),
+    })), 'peercode_problems')
+  }, [problems, exportCSV])
+
   async function handleResolveReport(reportId) {
     setActionId(reportId)
     try {
@@ -203,6 +214,10 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+      <Helmet>
+        <title>Admin — PeerCode</title>
+        <meta name="description" content="PeerCode admin dashboard for platform operations." />
+      </Helmet>
       <Navbar />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
@@ -276,6 +291,14 @@ export default function AdminPage() {
                   <StatCard label="Sessions" value={stats?.totalSessions ?? 0} detail={`${stats?.activeTodayCount ?? 0} started today`} icon={Activity} tone="green" />
                   <StatCard label="Problems" value={stats?.totalProblems ?? 0} detail="Active problem bank" icon={FileCode2} tone="amber" />
                   <StatCard label="Active Rooms" value={stats?.activeRooms ?? 0} detail="Waiting or live rooms" icon={AlertTriangle} tone={stats?.activeRooms > 0 ? 'green' : 'red'} />
+                </div>
+
+                {/* Engagement metrics */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                  <StatCard label="AI Interviews" value={stats?.totalInterviews ?? 0} detail="Mock interviews completed" icon={Activity} tone="purple" />
+                  <StatCard label="Pair Sessions" value={stats?.totalCollabSessions ?? 0} detail="Sessions with 2+ participants" icon={Users} tone="indigo" />
+                  <StatCard label="Ratings Submitted" value={stats?.totalRatings ?? 0} detail="Post-session reviews" icon={CheckCircle2} tone="green" />
+                  <StatCard label="Avg Rating" value={stats?.avgRating != null ? `${stats.avgRating} / 5` : '—'} detail="Across all reviews" icon={TrendingUp} tone="amber" />
                 </div>
 
                 {/* Subscription Stats */}
@@ -467,20 +490,49 @@ export default function AdminPage() {
                     <table className="w-full">
                       <thead className="bg-gray-50 dark:bg-gray-800/60">
                         <tr>
-                          {['User', 'Plan', 'Status', 'Period', 'Action'].map(header => (
-                            <th key={header} className="px-5 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-500 uppercase tracking-wider">{header}</th>
+                          {['User', 'Email', 'Plan', 'ELO', 'Sessions', 'Joined'].map(header => (
+                            <th key={header} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-500 uppercase tracking-wider">{header}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                        <tr>
-                          <td className="px-5 py-4" colSpan={5}>
-                            <div className="text-center py-8 text-gray-600 dark:text-gray-500">
-                              <Crown className="w-8 h-8 mx-auto mb-2 text-gray-400 dark:text-gray-700" />
-                              <p>Subscription details table requires additional API endpoint</p>
-                            </div>
-                          </td>
-                        </tr>
+                        {paidUsers.length === 0 ? (
+                          <tr>
+                            <td className="px-5 py-4" colSpan={6}>
+                              <div className="text-center py-8 text-gray-600 dark:text-gray-500">
+                                <Crown className="w-8 h-8 mx-auto mb-2 text-gray-400 dark:text-gray-700" />
+                                <p>No paid subscribers yet</p>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : paidUsers.map(u => {
+                          const planColors = { pro: 'text-amber-400 bg-amber-500/10', premium: 'text-purple-400 bg-purple-500/10', ultra: 'text-pink-400 bg-pink-500/10' }
+                          const planColor = planColors[u.subscription?.plan] || 'text-gray-400 bg-gray-500/10'
+                          return (
+                            <tr key={u._id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30 transition-colors">
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-7 h-7 rounded-full bg-indigo-600/20 flex items-center justify-center text-xs font-bold text-indigo-400">
+                                    {u.username?.[0]?.toUpperCase() || 'U'}
+                                  </div>
+                                  <span className="text-sm font-medium text-gray-900 dark:text-gray-100">{u.username}</span>
+                                  {u.isBanned && <span className="text-xs text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">Banned</span>}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">{u.email}</td>
+                              <td className="px-4 py-3">
+                                <span className={`text-xs font-bold px-2 py-1 rounded-full capitalize ${planColor}`}>
+                                  {u.subscription?.plan}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-sm font-semibold text-indigo-400">{u.elo || 1200}</td>
+                              <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">{u.sessionCount || 0}</td>
+                              <td className="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">
+                                {u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                              </td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -490,6 +542,12 @@ export default function AdminPage() {
 
             {activeTab === 'users' && (
               <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-800">
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">All Users ({users.length})</h3>
+                  <button onClick={exportUsers} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                    <Download className="w-3.5 h-3.5" /> Export CSV
+                  </button>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead className="bg-gray-50 dark:bg-gray-800/60">
@@ -529,7 +587,7 @@ export default function AdminPage() {
                     </tbody>
                   </table>
                 </div>
-                {users.length === 0 && <EmptyState title="No users found" body="Try a different search query." />}
+                {users.length === 0 && <EmptyState title="No users found" description="Try a different search query." />}
               </section>
             )}
 
@@ -537,10 +595,15 @@ export default function AdminPage() {
               <section className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-800">
                   <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">All Problems ({filteredProblems.length})</h3>
-                  <button onClick={() => { setEditProblem(null); setShowProblemModal(true) }}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 transition-colors">
-                    + Add Problem
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button onClick={exportProblems} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                      <Download className="w-3.5 h-3.5" /> Export CSV
+                    </button>
+                    <button onClick={() => { setEditProblem(null); setShowProblemModal(true) }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-500 transition-colors">
+                      + Add Problem
+                    </button>
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full">
@@ -572,7 +635,7 @@ export default function AdminPage() {
                                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
                                 <FileCode2 className="w-3 h-3" /> Edit
                               </button>
-                              <button onClick={() => handleToggleProblem(problem._id, problem.isActive)}
+                              <button onClick={() => problem.isActive ? setConfirmDelete(problem) : handleToggleProblem(problem._id, false)}
                                 disabled={actionId === problem._id}
                                 className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded text-xs font-semibold transition-colors ${problem.isActive
                                   ? 'bg-red-50/80 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/50 text-red-700 dark:text-red-200'
@@ -587,7 +650,7 @@ export default function AdminPage() {
                     </tbody>
                   </table>
                 </div>
-                {filteredProblems.length === 0 && <EmptyState title="No problems found" body="Try a different search query." />}
+                {filteredProblems.length === 0 && <EmptyState title="No problems found" description="Try a different search query." />}
               </section>
             )}
 
@@ -615,7 +678,7 @@ export default function AdminPage() {
                 ))}
                 {filteredReports.length === 0 && (
                   <div className="lg:col-span-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg">
-                    <EmptyState title="No open reports" body="The problem bank is clear right now." />
+                    <EmptyState title="No open reports" description="The problem bank is clear right now." />
                   </div>
                 )}
               </section>
@@ -629,6 +692,41 @@ export default function AdminPage() {
         problem={editProblem}
         onSaved={handleProblemSaved}
       />
+      {confirmDelete && (
+        <FocusTrap>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-500/10 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Archive problem?</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">This will hide the problem from users.</p>
+              </div>
+            </div>
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-5 bg-gray-50 dark:bg-gray-800 rounded-lg px-3 py-2">
+              "{confirmDelete.title}"
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { handleToggleProblem(confirmDelete._id, true); setConfirmDelete(null) }}
+                disabled={actionId === confirmDelete._id}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-60 transition-colors"
+              >
+                Archive
+              </button>
+            </div>
+          </div>
+        </div>
+        </FocusTrap>
+      )}
     </div>
   )
 }

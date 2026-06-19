@@ -45,6 +45,7 @@ const UserSchema = new mongoose.Schema(
     },
     apiKey: {
       type: String,
+      select: false,
     },
     role: {
       type: String,
@@ -81,10 +82,11 @@ const UserSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    emailVerificationToken: String,
+    emailVerificationToken: { type: String, select: false },
     emailVerificationExpires: Date,
     googleId: {
       type: String,
+      index: true,
       sparse: true,
       unique: true,
     },
@@ -104,6 +106,37 @@ const UserSchema = new mongoose.Schema(
         message: 'solvedProblems cannot exceed 100 entries',
       },
     },
+    eloHistory: [{
+      rating: { type: Number },
+      delta: { type: Number },
+      matchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Session' },
+      date: { type: Date, default: Date.now },
+    }],
+    stats: {
+      totalMatches: { type: Number, default: 0 },
+      wins: { type: Number, default: 0 },
+      losses: { type: Number, default: 0 },
+      draws: { type: Number, default: 0 },
+      winRate: { type: Number, default: 0 },
+      avgMatchDuration: { type: Number, default: 0 },
+      acceptanceRate: { type: Number, default: 0 },
+      totalSubmissions: { type: Number, default: 0 },
+      totalAccepted: { type: Number, default: 0 },
+      solvedByDifficulty: {
+        easy: { type: Number, default: 0 },
+        medium: { type: Number, default: 0 },
+        hard: { type: Number, default: 0 },
+      },
+      preferredLanguage: { type: String },
+      languageUsage: { type: Map, of: Number, default: () => new Map() },
+      solvedByTag: { type: Map, of: Number, default: () => new Map() },
+    },
+    badges: [{ id: String, earnedAt: { type: Date, default: Date.now } }],
+    rank: {
+      global: { type: Number },
+      percentile: { type: Number },
+      updatedAt: { type: Date },
+    },
     subscription: { type: SubscriptionSchema, default: () => ({}) },
     usage: {
       hintsUsed: { type: Number, default: 0 },
@@ -122,5 +155,10 @@ UserSchema.post('init', function () {
     this.usage = { hintsUsed: 0, analyzesUsed: 0, periodStart: new Date() };
   }
 });
+
+UserSchema.index({ elo: -1 });
+UserSchema.index({ elo: -1, _id: 1 });
+UserSchema.index({ isBanned: 1 });
+UserSchema.index({ 'subscription.plan': 1 });
 
 module.exports = mongoose.model('User', UserSchema);

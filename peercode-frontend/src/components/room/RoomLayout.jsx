@@ -25,6 +25,7 @@ export default function RoomLayout({
   localStream,
   remoteStreams,
   peerMediaStates,
+  connectionStates = {},
   isScreenSharing,
   onScreenShare,
   onStopScreenShare,
@@ -53,6 +54,7 @@ export default function RoomLayout({
   const [isRunning, setIsRunning] = useState(false)
   const [videoControlsOpen, setVideoControlsOpen] = useState(true)
   const [videoMaximized, setVideoMaximized] = useState(false)
+  const [mobilePanel, setMobilePanel] = useState(null)
   const codeRef = useRef(STARTER_CODE[language] || '')
   const searchTimeoutRef = useRef(null)
 
@@ -95,11 +97,9 @@ export default function RoomLayout({
     }
 
     socket.on('problem-updated', onProblemUpdated)
-    socket.on('problem_changed', onProblemChanged)
     socket.on('run-code-result', onRunCodeResult)
     return () => {
       socket.off('problem-updated', onProblemUpdated)
-      socket.off('problem_changed', onProblemChanged)
       socket.off('run-code-result', onRunCodeResult)
     }
   }, [socket])
@@ -255,16 +255,16 @@ export default function RoomLayout({
             } ${
               videoMaximized
                 ? 'inset-0 flex items-center justify-center p-8'
-                : 'bottom-4 left-1/2 -translate-x-1/2'
+                : 'bottom-4 left-1/2 -translate-x-1/2 lg:bottom-4 lg:left-auto lg:right-4 lg:translate-x-0'
             }`}
           >
             <div
               className={`shadow-2xl rounded-xl border border-gray-800 overflow-hidden bg-gray-950 ${
                 videoMaximized
                   ? 'w-full max-w-5xl h-[80vh]'
-                  : 'w-80'
+                  : 'w-[22rem]'
               }`}
-              style={videoMaximized ? {} : { height: '300px' }}
+              style={videoMaximized ? {} : { height: '320px' }}
               onClick={e => e.stopPropagation()}
             >
               <VideoPanel
@@ -275,6 +275,7 @@ export default function RoomLayout({
                 localStream={localStream}
                 remoteStreams={remoteStreams}
                 peerMediaStates={peerMediaStates}
+                connectionStates={connectionStates}
                 participants={participants}
                 isScreenSharing={isScreenSharing}
                 isMaximized={videoMaximized}
@@ -531,6 +532,45 @@ export default function RoomLayout({
           onSelectProblem={handleSelectProblem}
           onClose={() => setShowProblemBrowser(false)}
         />
+      )}
+
+      {/* Mobile bottom nav — access panels hidden on small screens */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 flex items-center justify-around bg-gray-900/95 backdrop-blur-md border-t border-gray-800 py-2 px-1">
+        {[
+          { id: 'problem', label: 'Problem', icon: Search },
+          { id: 'chat', label: 'Chat', icon: MessageCircle },
+          { id: 'people', label: 'People', icon: Users },
+          { id: 'ai', label: 'AI', icon: Lightbulb },
+        ].map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setMobilePanel(mobilePanel === id ? null : id)}
+            className={`flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg text-xs transition-colors ${
+              mobilePanel === id ? 'text-indigo-400 bg-indigo-500/10' : 'text-gray-500 hover:text-gray-300'
+            }`}
+          >
+            <Icon className="w-4 h-4" />
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Mobile panel overlay */}
+      {mobilePanel && (
+        <div className="lg:hidden fixed inset-x-0 bottom-12 top-14 z-20 bg-gray-950 border-t border-gray-800 overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-800 bg-gray-900 flex-shrink-0">
+            <span className="text-sm font-semibold text-gray-200 capitalize">{mobilePanel === 'ai' ? 'AI Hints' : mobilePanel}</span>
+            <button onClick={() => setMobilePanel(null)} className="p-1 text-gray-500 hover:text-gray-200 rounded transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            {mobilePanel === 'problem' && <ProblemPanel problem={problem} problemId={problem?._id} problemSlug={problem?.slug} />}
+            {mobilePanel === 'chat' && <ChatPanel socket={socket} roomId={roomId} />}
+            {mobilePanel === 'people' && <ParticipantList participants={participants} currentUserId={user?.id} />}
+            {mobilePanel === 'ai' && <AIHintPanel code={code} language={language} problem={problem} />}
+          </div>
+        </div>
       )}
     </div>
   )

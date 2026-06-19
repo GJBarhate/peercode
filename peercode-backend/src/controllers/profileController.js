@@ -52,10 +52,10 @@ async function updateProfile(req, res) {
     }
 
     await user.save();
-    success(res, { user: { id: user._id, username: user.username, email: user.email } }, 'Profile updated');
+    return success(res, { user: { id: user._id, username: user.username, email: user.email } }, 'Profile updated');
   } catch (err) {
     logger.error('Update profile error:', err);
-    fail(res, 500, 'Failed to update profile');
+    return fail(res, 500, 'Failed to update profile');
   }
 }
 
@@ -104,10 +104,10 @@ async function changePassword(req, res) {
     user.passwordHash = await bcrypt.hash(newPassword, salt);
     await user.save();
 
-    success(res, {}, 'Password updated successfully');
+    return success(res, {}, 'Password updated successfully');
   } catch (err) {
     logger.error('Change password error:', err);
-    fail(res, 500, 'Failed to change password');
+    return fail(res, 500, 'Failed to change password');
   }
 }
 

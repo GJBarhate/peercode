@@ -1,9 +1,14 @@
 import { Link } from 'react-router-dom'
+import { Helmet } from 'react-helmet-async'
 import { Home } from 'lucide-react'
 
 export default function NotFoundPage() {
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <Helmet>
+        <title>Page Not Found | PeerCode</title>
+        <meta name="description" content="The page you're looking for doesn't exist" />
+      </Helmet>
       <div className="text-center px-4">
         <div className="text-9xl font-black text-indigo-500/20 select-none mb-4">404</div>
         <h1 className="text-3xl font-bold text-gray-100 mb-3">Page not found</h1>

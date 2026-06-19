@@ -75,8 +75,18 @@ Return ONLY valid JSON (no markdown, no extra text) with this exact structure:
     "complexity": <number 1-5>
   },
   "overallReadiness": <number 1-10>,
+  "overallScore": <number 0-100>,
   "studyNext": ["<actionable tip 1>", "<actionable tip 2>"],
-  "weakTopics": ["<topic 1>", "<topic 2>"]
+  "weakTopics": ["<topic 1>", "<topic 2>"],
+  "timeComplexity": "<Big-O and explanation>",
+  "spaceComplexity": "<Big-O and explanation>",
+  "approachAnalysis": "<paragraph about problem-solving approach>",
+  "interviewerPerspective": "<what an interviewer would think>",
+  "improvementPlan": ["<step 1>", "<step 2>", "<step 3>"],
+  "similarProblems": [
+    {"title": "<name>", "difficulty": "<easy|medium|hard>", "reason": "<why relevant>"},
+    {"title": "<name>", "difficulty": "<easy|medium|hard>", "reason": "<why relevant>"}
+  ]
 }`;
 
     // Validate Gemini AI config before inner try
@@ -90,7 +100,7 @@ Return ONLY valid JSON (no markdown, no extra text) with this exact structure:
 
     try {
       // Call Gemini with timeout
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || 'gemini-1.5-flash' });
 
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('Gemini timeout')), 30000)
@@ -104,12 +114,11 @@ Return ONLY valid JSON (no markdown, no extra text) with this exact structure:
       // Parse JSON response
       let debriefData;
       try {
-        // Extract JSON from response (handle markdown code blocks)
-        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-          throw new Error('No JSON found in response');
-        }
-        debriefData = JSON.parse(jsonMatch[0]);
+        // Slice from first { to last } — handles markdown preamble and trailing text
+        const firstBrace = responseText.indexOf('{');
+        const lastBrace = responseText.lastIndexOf('}');
+        if (firstBrace === -1 || lastBrace <= firstBrace) throw new Error('No JSON in response');
+        debriefData = JSON.parse(responseText.slice(firstBrace, lastBrace + 1));
       } catch (parseErr) {
         logger.error('Failed to parse Gemini JSON response:', parseErr);
         // Return a basic debrief if parsing fails
@@ -129,13 +138,25 @@ Return ONLY valid JSON (no markdown, no extra text) with this exact structure:
         sessionId: sessionId,
         roomId: session.roomId || '',
         generatedFor: userId,
+        problemTitle: session.problemSnapshot?.title || session.problem?.title || '',
+        problemDifficulty: session.problemSnapshot?.difficulty || session.problem?.difficulty || '',
+        problemSlug: session.problem?.slug || '',
+        sessionDate: session.createdAt || new Date(),
+        duration: session.duration || 0,
         summary: debriefData.summary || 'Debrief generated',
         scores: debriefData.scores || {},
         overallReadiness: debriefData.overallReadiness || 5,
+        overallScore: debriefData.overallScore || null,
         whatWentWell: debriefData.whatWentWell || [],
         areasToImprove: debriefData.areasToImprove || [],
         studyNext: debriefData.studyNext || [],
-        weakTopics: debriefData.weakTopics || []
+        weakTopics: debriefData.weakTopics || [],
+        timeComplexity: debriefData.timeComplexity || '',
+        spaceComplexity: debriefData.spaceComplexity || '',
+        approachAnalysis: debriefData.approachAnalysis || '',
+        interviewerPerspective: debriefData.interviewerPerspective || '',
+        improvementPlan: debriefData.improvementPlan || [],
+        similarProblems: debriefData.similarProblems || [],
       });
 
       await aiDebrief.save();
@@ -144,7 +165,7 @@ Return ONLY valid JSON (no markdown, no extra text) with this exact structure:
       session.debrief = aiDebrief._id;
       await session.save();
 
-      success(res, aiDebrief, 'Debrief generated successfully');
+      return success(res, aiDebrief, 'Debrief generated successfully');
     } catch (geminiErr) {
       logger.error('Gemini API error:', geminiErr);
       
@@ -171,7 +192,7 @@ Return ONLY valid JSON (no markdown, no extra text) with this exact structure:
     }
   } catch (err) {
     logger.error('Generate debrief error:', err);
-    fail(res, 500, 'Failed to generate debrief');
+    return fail(res, 500, 'Failed to generate debrief');
   }
 }
 
@@ -195,10 +216,10 @@ async function getDebrief(req, res) {
     }
 
     const debrief = await AiDebrief.findById(session.debrief);
-    success(res, debrief || {}, 'Debrief retrieved');
+    return success(res, debrief || {}, 'Debrief retrieved');
   } catch (err) {
     logger.error('Get debrief error:', err);
-    fail(res, 500, 'Failed to fetch debrief');
+    return fail(res, 500, 'Failed to fetch debrief');
   }
 }
 

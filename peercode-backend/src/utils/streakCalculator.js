@@ -81,7 +81,7 @@ async function computeUserStreak(userId) {
       totalSessions
     };
   } catch (err) {
-    console.error('Error computing streak:', err);
+    require('./logger').error('Error computing streak:', err);
     return {
       currentStreak: 0,
       longestStreak: 0,

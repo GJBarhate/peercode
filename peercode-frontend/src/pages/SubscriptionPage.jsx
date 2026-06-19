@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
-import { Check, Crown, Gem, Shield, ArrowLeft, Sparkles, Star, TrendingUp, Zap } from 'lucide-react'
+import { Helmet } from 'react-helmet-async'
+import { Check, Crown, Gem, Shield, ArrowLeft, Sparkles, Star, TrendingUp, Zap, ChevronDown } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import Navbar from '../components/common/Navbar'
 import Skeleton from '../components/common/Skeleton'
@@ -67,7 +68,6 @@ export default function SubscriptionPage() {
       }
       setStatus(statusRes.data?.data || { plan: 'free', status: 'active' })
     } catch (err) {
-      console.error('Failed to load:', err)
     } finally {
       setLoading(false)
     }
@@ -126,8 +126,12 @@ export default function SubscriptionPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+      <Helmet>
+        <title>Subscription Plans | PeerCode</title>
+        <meta name="description" content="Upgrade your PeerCode plan for premium features" />
+      </Helmet>
       <Navbar />
-      
+
       <div className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-indigo-100/50 dark:from-indigo-950/50 via-transparent to-transparent pointer-events-none" />
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-indigo-600/5 dark:bg-indigo-600/10 rounded-full blur-[120px] pointer-events-none" />
@@ -443,13 +447,5 @@ export default function SubscriptionPage() {
         onCancelled={handleCancelSuccess}
       />
     </div>
-  )
-}
-
-function ChevronDown({ className }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M6 9l6 6 6-6" />
-    </svg>
   )
 }

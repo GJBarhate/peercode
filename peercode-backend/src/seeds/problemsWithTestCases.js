@@ -72,12 +72,12 @@ public:
       javascript: `// __USER_CODE__
 const lines = \`__TEST_INPUT__\`.trim().split('\\n');
 const nums = JSON.parse(lines[0]);
-const target = parseInt(lines[1]);
+const target = parseInt(lines[1], 10);
 console.log(JSON.stringify(twoSum(nums, target)));`,
       typescript: `// __USER_CODE__
 const lines: string[] = \`__TEST_INPUT__\`.trim().split('\\n');
 const nums: number[] = JSON.parse(lines[0]);
-const target: number = parseInt(lines[1]);
+const target: number = parseInt(lines[1], 10);
 console.log(JSON.stringify(twoSum(nums, target)));`,
       python: `import json, sys
 # __USER_CODE__
