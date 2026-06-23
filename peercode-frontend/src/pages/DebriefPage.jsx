@@ -331,7 +331,7 @@ export default function DebriefPage() {
  {debrief.duration > 0 && (
  <span className="flex items-center gap-1.5 text-xs text-text-muted">
  <Zap className="w-3 h-3 text-amber-400/60" />
- {Math.round(debrief.duration / 60)} min
+ {debrief.duration} min
  </span>
  )}
  </div>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { Helmet } from 'react-helmet-async'
-import { Joyride } from 'react-joyride'
+import Joyride from 'react-joyride'
 import Fuse from 'fuse.js'
 import { Search, Filter, X, LayoutGrid, List, CheckCircle, Users, Shuffle } from 'lucide-react'
 import Badge from '../components/common/Badge'

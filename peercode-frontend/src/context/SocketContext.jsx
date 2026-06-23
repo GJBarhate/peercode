@@ -3,6 +3,7 @@ import { createSocket, disconnectSocket } from '../services/socketService'
 import { refreshAccessToken, getAccessToken } from '../services/api'
 import { useAuth } from './AuthContext'
 import { logger } from '../utils/logger'
+import { useConnectionQuality } from '../hooks/useConnectionQuality'
 
 const SocketContext = createContext(null)
 
@@ -10,11 +11,14 @@ export function SocketProvider({ children }) {
  const { accessToken, user, isLoading: authLoading } = useAuth()
  const [socket, setSocket] = useState(null)
  const [isConnected, setIsConnected] = useState(false)
+ const [reconnectAttempt, setReconnectAttempt] = useState(0)
  const socketRef = useRef(null)
  const reconnectTimeoutRef = useRef(null)
  const connectionAttemptRef = useRef(0)
  const previousSocketIdRef = useRef(null)
  const prevTokenRef = useRef(null)
+
+ const { quality, latency, jitter } = useConnectionQuality(socket, isConnected)
 
  useEffect(() => {
  if (authLoading) {
@@ -33,7 +37,6 @@ export function SocketProvider({ children }) {
  return
  }
 
- // If socket exists but token changed, disconnect and reconnect to re-authenticate
  if (socketRef.current && prevTokenRef.current !== accessToken) {
  logger.debug('Token changed - disconnecting socket to re-authenticate')
  disconnectSocket()
@@ -56,13 +59,13 @@ export function SocketProvider({ children }) {
  logger.debug('Socket connected successfully')
  setIsConnected(true)
  connectionAttemptRef.current = 0
+ setReconnectAttempt(0)
  if (reconnectTimeoutRef.current) {
  clearTimeout(reconnectTimeoutRef.current)
  reconnectTimeoutRef.current = null
  }
  }
 
- // Track current room for reconnection
  const handleJoinRoom = (data) => {
  if (data?.roomId) {
  socketRef.current.currentRoom = data.roomId
@@ -85,6 +88,7 @@ export function SocketProvider({ children }) {
  const handleConnectError = (err) => {
  logger.error('Socket connection error:', err)
  connectionAttemptRef.current += 1
+ setReconnectAttempt(connectionAttemptRef.current)
  setIsConnected(false)
  if (err.message?.includes('Authentication') || err.message?.includes('Invalid token')) {
  logger.debug('Auth error on socket — refreshing token')
@@ -102,8 +106,8 @@ export function SocketProvider({ children }) {
  logger.debug('Socket reconnected successfully')
  setIsConnected(true)
  connectionAttemptRef.current = 0
- 
- // Emit rejoin-room with previous socket ID to rejoin rooms
+ setReconnectAttempt(0)
+
  if (previousSocketIdRef.current && socketRef.current?.connected) {
  logger.debug('Emitting rejoin-room with previous socket ID:', previousSocketIdRef.current)
  socketRef.current.emit('rejoin-room', {
@@ -114,19 +118,14 @@ export function SocketProvider({ children }) {
  previousSocketIdRef.current = socketRef.current?.id
  }
 
- const handleReconnectAttempt = () => {
- connectionAttemptRef.current += 1
+ const handleReconnectAttempt = (attempt) => {
+ connectionAttemptRef.current = attempt || connectionAttemptRef.current + 1
+ setReconnectAttempt(connectionAttemptRef.current)
  logger.debug(`Socket reconnect attempt ${connectionAttemptRef.current}`)
- if (connectionAttemptRef.current > 3) {
- logger.warn('Multiple reconnection attempts - connection may be unstable')
- }
  }
 
  const handleReconnectError = (err) => {
  logger.error('Socket reconnection failed:', err)
- if (connectionAttemptRef.current >= 5) {
- logger.error('Max reconnection attempts reached - giving up')
- }
  }
 
  newSocket.on('connect', handleConnect)
@@ -149,7 +148,14 @@ export function SocketProvider({ children }) {
  }
  }, [accessToken, user, authLoading])
 
- const value = useMemo(() => ({ socket, isConnected }), [socket, isConnected])
+ const value = useMemo(() => ({
+   socket,
+   isConnected,
+   connectionQuality: quality,
+   latency,
+   jitter,
+   reconnectAttempt,
+ }), [socket, isConnected, quality, latency, jitter, reconnectAttempt])
 
  return (
  <SocketContext.Provider value={value}>

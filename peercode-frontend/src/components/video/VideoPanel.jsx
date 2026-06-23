@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import VideoTile from './VideoTile'
 import VideoControls from './VideoControls'
+import { useBackgroundBlur } from '../../hooks/useBackgroundBlur'
 import { MicOff, VideoOff, Monitor, Users, Wifi, WifiOff, Loader2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -33,6 +34,13 @@ function ConnectionBadge({ state }) {
  )
 }
 
+const VIDEO_QUALITY_LABELS = {
+ high: { label: 'HD', cls: 'text-green-400' },
+ medium: { label: 'SD', cls: 'text-yellow-400' },
+ low: { label: 'LD', cls: 'text-orange-400' },
+ minimal: { label: 'Min', cls: 'text-red-400' },
+}
+
 export default function VideoPanel({
  roomId,
  socket,
@@ -45,6 +53,7 @@ export default function VideoPanel({
  participants = [],
  isScreenSharing = false,
  isMaximized = false,
+ videoQuality,
  onEndCall,
  onMinimize,
  onMaximize,
@@ -54,6 +63,7 @@ export default function VideoPanel({
  const [isMuted, setIsMuted] = useState(false)
  const [isVideoOff, setIsVideoOff] = useState(false)
  const streamRef = useRef(localStream)
+ const { isBlurEnabled, startBlur, stopBlur } = useBackgroundBlur()
 
  const participantMap = {}
  participants.forEach(p => {
@@ -125,6 +135,18 @@ export default function VideoPanel({
  const handleHangUp = () => {
  onEndCall?.()
  }
+
+ const handleToggleBlur = useCallback(async () => {
+   if (isBlurEnabled) {
+     const original = stopBlur()
+     if (original) streamRef.current = original
+   } else {
+     if (streamRef.current) {
+       const blurred = await startBlur(streamRef.current, 'blur')
+       if (blurred) streamRef.current = blurred
+     }
+   }
+ }, [isBlurEnabled, startBlur, stopBlur])
 
  const remoteEntries = Object.entries(remoteStreams)
 
@@ -243,6 +265,11 @@ export default function VideoPanel({
  <Monitor className="w-2.5 h-2.5" /> Sharing
  </div>
  )}
+ {videoQuality && VIDEO_QUALITY_LABELS[videoQuality] && (
+   <div className="absolute top-1 right-1 bg-black/70 backdrop-blur-sm text-[10px] px-1.5 py-0.5 rounded font-mono">
+     <span className={VIDEO_QUALITY_LABELS[videoQuality].cls}>{VIDEO_QUALITY_LABELS[videoQuality].label}</span>
+   </div>
+ )}
  </div>
  )}
  </div>
@@ -252,10 +279,12 @@ export default function VideoPanel({
  isMuted={isMuted}
  isVideoOff={isVideoOff}
  isSharing={isScreenSharing}
+ isBlurEnabled={isBlurEnabled}
  onToggleMute={toggleMute}
  onToggleVideo={toggleVideo}
  onHangUp={handleHangUp}
  onScreenShare={isScreenSharing ? onStopScreenShare : onScreenShare}
+ onToggleBlur={handleToggleBlur}
  />
  </div>
  </div>

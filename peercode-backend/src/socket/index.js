@@ -67,6 +67,11 @@ async function initSocket(httpServer) {
   const roomHandlerInstance = require('./roomHandler')(io);
 
   io.on('connection', (socket) => {
+    // Latency measurement for connection quality indicator
+    socket.on('ping-measure', () => {
+      socket.emit('pong-measure');
+    });
+
     socket.on('disconnect', (reason) => {
       logger.debug(`Socket disconnected for user ${socket.userId}: ${reason}`);
     });

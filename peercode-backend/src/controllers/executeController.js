@@ -33,7 +33,7 @@ function outputsMatch(actual, expected) {
   try {
     const pa = JSON.parse(a);
     const pe = JSON.parse(e);
-    if (Array.isArray(pa) && Array.isArray(pe)) return JSON.stringify(pa) === JSON.stringify(pe);
+    return JSON.stringify(pa) === JSON.stringify(pe);
   } catch (_) {}
   return a.replace(/\s+/g, '') === e.replace(/\s+/g, '');
 }
@@ -132,9 +132,7 @@ async function executeCode(req, res) {
       try {
         const parsed = JSON.parse(input);
         if (Array.isArray(parsed) && paramCount === 1 && parsed.length > 0) {
-          if (Array.isArray(parsed[0]) || parsed.length > 1) {
-            tc.input = JSON.stringify([parsed]);
-          }
+          tc.input = JSON.stringify([parsed]);
         }
       } catch (_) {
         if (input.includes('\n') && paramCount > 1) {

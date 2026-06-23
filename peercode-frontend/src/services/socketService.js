@@ -20,8 +20,10 @@ export function createSocket(token) {
  transports: ['websocket', 'polling'],
  reconnection: true,
  reconnectionDelay: 1000,
- reconnectionDelayMax: 5000,
- reconnectionAttempts: 15,
+ reconnectionDelayMax: 30000,
+ reconnectionAttempts: 20,
+ randomizationFactor: 0.5,
+ timeout: 20000,
  forceNew: true,
  })
 

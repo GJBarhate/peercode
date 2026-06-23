@@ -196,13 +196,6 @@ export function AuthProvider({ children }) {
 
  const login = useCallback(async (email, password) => {
  try {
- // Clear any previous sessions first
- clearAllSessions()
- setUser(null)
- setAccessTokenState(null)
- setApiToken(null)
- 
- // Now perform login
  const { data } = await axios.post(
  `${API_BASE_URL}/auth/login`,
  { email, password },
@@ -215,17 +208,10 @@ export function AuthProvider({ children }) {
  logger.error('Login failed:', error)
  throw error
  }
- }, [setAccessToken, clearAllSessions])
+ }, [setAccessToken])
 
  const register = useCallback(async (username, email, password) => {
  try {
- // Clear any previous sessions first
- clearAllSessions()
- setUser(null)
- setAccessTokenState(null)
- setApiToken(null)
- 
- // Now perform registration - returns message, NOT tokens
  const { data } = await axios.post(
  `${API_BASE_URL}/auth/register`,
  { username, email, password },
@@ -236,7 +222,7 @@ export function AuthProvider({ children }) {
  logger.error('Registration failed:', error)
  throw error
  }
- }, [clearAllSessions])
+ }, [])
 
  const verifyOTP = useCallback(async (email, otp) => {
  try {

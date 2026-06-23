@@ -314,39 +314,43 @@ module.exports = function(io) {
         // Update local room reference for use below
         if (!room) room = { currentProblem, participants: roomParticipants, messages: [] };
 
-        // Check if session already exists for this room (prevent duplicates)
-        const existingSession = await Session.findOne({ roomId, status: 'completed' });
-        if (existingSession) {
+        // Atomic upsert to prevent duplicate sessions from concurrent end_session events
+        const session = await Session.findOneAndUpdate(
+          { roomId, status: 'completed' },
+          {
+            $setOnInsert: {
+              roomId,
+              problem: currentProblem.id,
+              problemSnapshot: {
+                title: currentProblem.title,
+                difficulty: currentProblem.difficulty,
+                slug: currentProblem.slug,
+                tags: currentProblem.tags
+              },
+              participants: roomParticipants.map(p => p.userId).filter(Boolean),
+              finalCode,
+              finalLanguage,
+              testResults,
+              status: 'completed',
+              endTime: new Date(),
+              duration: data.duration || 0
+            }
+          },
+          { upsert: true, new: true, rawResult: true }
+        );
+
+        const isNew = session.lastErrorObject?.upserted;
+        const sessionDoc = session.value;
+        if (!isNew) {
           return io.in(roomId).emit('session-ended', {
-            sessionId: existingSession._id,
-            duration: existingSession.duration
+            sessionId: sessionDoc._id,
+            duration: sessionDoc.duration
           });
         }
 
-        // Create session record
-        const session = new Session({
-          roomId,
-          problem: currentProblem.id,
-          problemSnapshot: {
-            title: currentProblem.title,
-            difficulty: currentProblem.difficulty,
-            slug: currentProblem.slug,
-            tags: currentProblem.tags
-          },
-          participants: roomParticipants.map(p => p.userId).filter(Boolean),
-          finalCode,
-          finalLanguage,
-          testResults,
-          status: 'completed',
-          endTime: new Date(),
-          duration: data.duration || 0
-        });
-
-        await session.save();
-
         io.in(roomId).emit('session-ended', {
-          sessionId: session._id,
-          duration: session.duration
+          sessionId: sessionDoc._id,
+          duration: sessionDoc.duration
         });
 
         // Persist post-match stats for each participant
@@ -355,7 +359,7 @@ module.exports = function(io) {
           const users = await User.find({ _id: { $in: participantUserIds } });
 
           for (const user of users) {
-            const eloEntry = (session.eloData || []).find(
+            const eloEntry = (sessionDoc.eloData || []).find(
               e => e.userId?.toString() === user._id.toString()
             );
             const delta = eloEntry?.delta || 0;
@@ -368,7 +372,7 @@ module.exports = function(io) {
               },
               $push: {
                 eloHistory: {
-                  $each: [{ rating: user.elo + delta, delta, matchId: session._id, date: new Date() }],
+                  $each: [{ rating: user.elo + delta, delta, matchId: sessionDoc._id, date: new Date() }],
                   $slice: -200,
                 },
               },
@@ -394,10 +398,13 @@ module.exports = function(io) {
               statsUpdate.$inc[`stats.languageUsage.${safeLang}`] = 1;
             }
 
-            await User.updateOne({ _id: user._id }, statsUpdate);
+            const updated = await User.findOneAndUpdate(
+              { _id: user._id },
+              statsUpdate,
+              { new: true, select: 'stats' }
+            ).lean();
 
-            // Update computed fields
-            const updated = await User.findById(user._id).select('stats').lean();
+            // Compute derived fields in one atomic update
             if (updated?.stats?.totalMatches > 0) {
               const winRate = Math.round((updated.stats.wins / updated.stats.totalMatches) * 100);
               const acceptanceRate = updated.stats.totalSubmissions > 0
@@ -410,26 +417,27 @@ module.exports = function(io) {
                 },
               });
             }
-          }
-          // Check and award badges after stats update
-          try {
-            const badgeContext = {
-              won,
-              difficulty: room.currentProblem?.difficulty,
-              duration: session.duration,
-              tags: room.currentProblem?.tags || [],
-            };
-            const newBadges = await checkAndAwardBadges(user._id, badgeContext);
-            if (newBadges.length > 0) {
-              const userSocket = [...io.sockets.sockets.values()].find(
-                s => s.data?.userId === user._id.toString()
-              );
-              if (userSocket) {
-                userSocket.emit('badge:earned', newBadges);
+
+            // Check and award badges after stats update
+            try {
+              const badgeContext = {
+                won,
+                difficulty: room.currentProblem?.difficulty,
+                duration: sessionDoc.duration,
+                tags: room.currentProblem?.tags || [],
+              };
+              const newBadges = await checkAndAwardBadges(user._id, badgeContext);
+              if (newBadges.length > 0) {
+                const userSocket = [...io.sockets.sockets.values()].find(
+                  s => s.data?.userId === user._id.toString()
+                );
+                if (userSocket) {
+                  userSocket.emit('badge:earned', newBadges);
+                }
               }
+            } catch (badgeErr) {
+              logger.error('Badge check error:', badgeErr.message);
             }
-          } catch (badgeErr) {
-            logger.error('Badge check error:', badgeErr.message);
           }
 
         } catch (statsErr) {
@@ -449,7 +457,7 @@ module.exports = function(io) {
             roomId,
             participantIds: debriefParticipants
           });
-          logger.info(`Queued AI debrief for session ${session._id}`);
+          logger.info(`Queued AI debrief for session ${sessionDoc._id}`);
         } catch (jobErr) {
           logger.error('Failed to queue debrief job:', jobErr);
         }

@@ -1,6 +1,6 @@
-import { Mic, MicOff, Video, VideoOff, PhoneOff, Monitor } from 'lucide-react'
+import { Mic, MicOff, Video, VideoOff, PhoneOff, Monitor, Sparkles } from 'lucide-react'
 
-export default function VideoControls({ isMuted, isVideoOff, isSharing, onToggleMute, onToggleVideo, onHangUp, onScreenShare }) {
+export default function VideoControls({ isMuted, isVideoOff, isSharing, isBlurEnabled, onToggleMute, onToggleVideo, onHangUp, onScreenShare, onToggleBlur }) {
  const btnBase = 'p-2.5 rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-offset-gray-950 shadow-lg active:scale-95'
  return (
  <div className="flex items-center gap-2 p-1.5 bg-bg-surface/95 backdrop-blur-md rounded-2xl border border-border-default/80 shadow-xl shadow-black/30" role="toolbar" aria-label="Video controls">
@@ -31,6 +31,22 @@ export default function VideoControls({ isMuted, isVideoOff, isSharing, onToggle
  >
  {isVideoOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
  </button>
+
+ {onToggleBlur && (
+   <button
+     onClick={onToggleBlur}
+     className={`${btnBase} ${
+       isBlurEnabled
+         ? 'bg-violet-600 hover:bg-violet-500 text-white shadow-violet-600/30 focus:ring-violet-500'
+         : 'bg-bg-elevated hover:bg-bg-overlay text-text-secondary hover:text-white shadow-gray-800/50 focus:ring-indigo-400'
+     }`}
+     title={isBlurEnabled ? 'Disable background blur' : 'Enable background blur'}
+     aria-label={isBlurEnabled ? 'Disable background blur' : 'Enable background blur'}
+     aria-pressed={isBlurEnabled}
+   >
+     <Sparkles className="w-4 h-4" />
+   </button>
+ )}
 
  {onScreenShare && (
  <button

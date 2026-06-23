@@ -45,6 +45,21 @@ module.exports = function (io) {
       io.to(roomId).except(socket.id).emit('cursor-update', {
         ...cursor,
         socketId: socket.id,
+        username: socket.data.username,
+        userId: socket.data.userId,
+      });
+    });
+
+    const typingSpeedTimestamps = new Map();
+    socket.on('typing-speed', (roomId, data) => {
+      const now = Date.now();
+      const last = typingSpeedTimestamps.get(roomId) || 0;
+      if (now - last < 1000) return; // throttle to 1/sec
+      typingSpeedTimestamps.set(roomId, now);
+      io.to(roomId).except(socket.id).emit('typing-speed', {
+        ...data,
+        socketId: socket.id,
+        username: socket.data.username,
       });
     });
 

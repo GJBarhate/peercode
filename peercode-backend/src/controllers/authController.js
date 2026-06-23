@@ -9,18 +9,32 @@ const nodemailer = require('nodemailer');
 const { fail, ok: success } = require('../utils/httpResponse');
 const logger = require('../utils/logger');
 
-const mailTransporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: parseInt(process.env.SMTP_PORT || '587', 10),
-  secure: parseInt(process.env.SMTP_PORT || '587', 10) === 465,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 10000,
-});
+let mailTransporter;
+try {
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
+
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    logger.warn(`SMTP not configured — OTP emails disabled. Missing: ${[!smtpHost && 'SMTP_HOST', !smtpUser && 'SMTP_USER', !smtpPass && 'SMTP_PASS'].filter(Boolean).join(', ')}`);
+  } else {
+    mailTransporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpPort === 465,
+      auth: { user: smtpUser, pass: smtpPass },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000,
+    });
+    mailTransporter.verify()
+      .then(() => logger.info(`SMTP connected: ${smtpHost}:${smtpPort} as ${smtpUser}`))
+      .catch((err) => logger.error(`SMTP verification failed (${smtpHost}:${smtpPort}): ${err.message}. For Gmail, use an App Password from https://myaccount.google.com/apppasswords`));
+  }
+} catch (err) {
+  logger.error('Failed to create mail transporter:', err);
+}
 
 const googleClient = new OAuth2Client(
   process.env.GOOGLE_CLIENT_ID,
@@ -53,20 +67,32 @@ function buildTokenPayload(user) {
 }
 
 async function sendOTPEmail(user, otp) {
-  if (process.env.NODE_ENV === 'development') {
-    logger.info(`[DEV MODE] OTP for ${user.email}: ${otp}`);
+  logger.info(`[OTP] Verification code for ${user.email}: ${otp}`);
+  if (!mailTransporter) {
+    logger.error('SMTP not configured — set SMTP_HOST, SMTP_USER, SMTP_PASS in .env');
+    return;
   }
-  await mailTransporter.sendMail({
-    from: process.env.SMTP_USER,
-    to: user.email,
-    subject: 'Your PeerCode Verification Code',
-    html: `
-      <p>Hi ${user.username},</p>
-      <p>Your verification code is: <strong style="font-size: 24px; letter-spacing: 4px;">${otp}</strong></p>
-      <p>This code expires in 3 minutes.</p>
-      <p>If you didn't request this code, you can safely ignore this email.</p>
-    `,
-  });
+  try {
+    await mailTransporter.sendMail({
+      from: `"PeerCode" <${process.env.SMTP_USER}>`,
+      to: user.email,
+      subject: 'Your PeerCode Verification Code',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #0f0f23; border-radius: 12px; color: #e2e8f0;">
+          <h2 style="color: #818cf8; margin: 0 0 16px;">PeerCode Verification</h2>
+          <p style="margin: 0 0 24px; color: #94a3b8;">Hi ${user.username},</p>
+          <div style="text-align: center; padding: 24px; background: #1e1e3f; border-radius: 8px; margin: 0 0 24px;">
+            <span style="font-size: 32px; letter-spacing: 8px; font-weight: bold; color: #818cf8;">${otp}</span>
+          </div>
+          <p style="margin: 0 0 8px; color: #94a3b8; font-size: 14px;">This code expires in 3 minutes.</p>
+          <p style="margin: 0; color: #64748b; font-size: 12px;">If you didn't request this code, you can safely ignore this email.</p>
+        </div>
+      `,
+    });
+    logger.info(`OTP email sent to ${user.email}`);
+  } catch (err) {
+    logger.error(`Failed to send OTP to ${user.email}: ${err.message}`);
+  }
 }
 
 async function register(req, res) {
@@ -75,30 +101,29 @@ async function register(req, res) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail(res, 400, 'Invalid email address');
   if (password.length < 8) return fail(res, 400, 'Password must be at least 8 characters');
 
-  const existingUser = await User.findOne({ email });
-  if (existingUser && existingUser.verified) return fail(res, 409, 'Email already registered');
+  // In development, always allow registration (delete existing user if any)
+  const normalizedEmail = email.toLowerCase().trim();
+  if (process.env.NODE_ENV === 'development') {
+    await User.deleteOne({ email: normalizedEmail });
+  } else {
+    const existingUser = await User.findOne({ email: normalizedEmail });
+    if (existingUser && existingUser.verified) {
+      return fail(res, 409, 'Email already registered');
+    }
+  }
 
   const passwordHash = await bcrypt.hash(password, 10);
   const otp = generateOTP();
   const otpExpires = new Date(Date.now() + 3 * 60 * 1000);
 
-  let user;
-  if (existingUser) {
-    existingUser.username = username;
-    existingUser.passwordHash = passwordHash;
-    existingUser.emailVerificationToken = otp;
-    existingUser.emailVerificationExpires = otpExpires;
-    user = await existingUser.save();
-  } else {
-    user = await User.create({
-      username,
-      email,
-      passwordHash,
-      verified: false,
-      emailVerificationToken: otp,
-      emailVerificationExpires: otpExpires,
-    });
-  }
+  const user = await User.create({
+    username,
+    email: normalizedEmail,
+    passwordHash,
+    verified: false,
+    emailVerificationToken: otp,
+    emailVerificationExpires: otpExpires,
+  });
 
   try {
     await sendOTPEmail(user, otp);
@@ -106,10 +131,11 @@ async function register(req, res) {
     logger.error('Failed to send OTP email:', err);
   }
 
-  res.status(201).json({
+  const response = {
     message: 'Registration successful. Please check your email for the verification code.',
     requiresVerification: true,
-  });
+  };
+  res.status(201).json(response);
 }
 
 async function verifyOTP(req, res) {
@@ -163,6 +189,24 @@ async function login(req, res) {
   user.loginAttempts = 0;
   user.lockUntil = null;
   await user.save();
+
+  // Block unverified accounts — resend OTP so they can verify
+  if (!user.verified) {
+    const otp = generateOTP();
+    user.emailVerificationToken = otp;
+    user.emailVerificationExpires = new Date(Date.now() + 3 * 60 * 1000);
+    await user.save();
+    try {
+      await sendOTPEmail(user, otp);
+    } catch (err) {
+      logger.error('Failed to send OTP during login:', err);
+    }
+    return res.status(403).json({
+      error: 'Account not verified. A new verification code has been sent to your email.',
+      requiresVerification: true,
+      email: user.email,
+    });
+  }
 
   const tokenPayload = buildTokenPayload(user);
   const accessToken = signToken(tokenPayload);
@@ -230,9 +274,10 @@ async function resendOTP(req, res) {
     await sendOTPEmail(user, otp);
   } catch (err) {
     logger.error('Failed to resend OTP:', err);
+    return fail(res, 500, 'Failed to send verification email. Please try again or contact support.');
   }
 
-  return success(res, { message: 'If the email exists, a new OTP has been sent.' });
+  return success(res, { message: 'A new verification code has been sent to your email.' });
 }
 
 async function googleAuth(req, res) {

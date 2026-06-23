@@ -10,6 +10,7 @@ import Spinner from '../components/common/Spinner'
 import KeyboardShortcutsCheatSheet from '../components/common/KeyboardShortcutsCheatSheet'
 import { useSocket } from '../context/SocketContext'
 import { useWebRTC } from '../hooks/useWebRTC'
+import { useBandwidthAdaptive } from '../hooks/useBandwidthAdaptive'
 import { useYjsEditor } from '../hooks/useYjsEditor'
 import { useRoom } from '../hooks/useRoom'
 import { createRoom, getErrorMessage, joinRoom } from '../services/api'
@@ -28,10 +29,12 @@ export default function RoomPage() {
  const [resolvedRoomId, setResolvedRoomId] = useState(roomId !== 'new' ? roomId : null)
  const [socketError, setSocketError] = useState(null)
  const [isEnding, setIsEnding] = useState(false)
+ const [showEndConfirm, setShowEndConfirm] = useState(false)
  const editorRef = useRef(null)
  const stuckShownRef = useRef(false)
  const hasJoinedRef = useRef(false)
  const mountedRef = useRef(true)
+ const sessionStartRef = useRef(null)
 
  useEffect(() => {
  if (roomId !== 'new') {
@@ -44,9 +47,9 @@ export default function RoomPage() {
 
  const handleRoomEnded = () => {
  toast.dismiss()
- toast('Session has ended', { duration: 2000 })
+ toast('Session has ended — loading debrief...', { duration: 2000 })
  setTimeout(() => {
- navigate('/dashboard', { replace: true })
+ navigate(`/debrief/${resolvedRoomId}`, { replace: true })
  }, 2000)
  }
 
@@ -83,26 +86,33 @@ export default function RoomPage() {
  }
  }, [localStream])
 
+  const confirmEndCall = useCallback(() => {
+    setShowEndConfirm(true)
+  }, [])
+
   const handleEndCall = useCallback(async (endData) => {
-  setIsEnding(true)
-  try {
-  if (socket) {
-  socket.emit('end-call', { roomId: resolvedRoomId, finalCode: endData?.finalCode, finalLanguage: endData?.finalLanguage })
-  }
-
- if (localStream) {
- localStream.getTracks().forEach(track => track.stop())
- }
-
- toast.success('Session ended')
- setTimeout(() => {
- navigate('/dashboard', { replace: true })
- }, 500)
- } catch (err) {
- toast.error('Failed to end session')
- setIsEnding(false)
- }
- }, [socket, resolvedRoomId, localStream, navigate])
+    setShowEndConfirm(false)
+    setIsEnding(true)
+    try {
+      if (socket) {
+        socket.emit('end-call', {
+          roomId: resolvedRoomId,
+          finalCode: endData?.finalCode,
+          finalLanguage: endData?.finalLanguage,
+        })
+      }
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop())
+      }
+      toast.success('Session ended — redirecting to debrief...')
+      setTimeout(() => {
+        navigate(`/debrief/${resolvedRoomId}`, { replace: true })
+      }, 1000)
+    } catch (err) {
+      toast.error('Failed to end session')
+      setIsEnding(false)
+    }
+  }, [socket, resolvedRoomId, localStream, navigate])
 
  useEffect(() => {
  const handleKeyPress = (e) => {
@@ -111,13 +121,13 @@ export default function RoomPage() {
  }
  if (e.ctrlKey && e.shiftKey && e.key === 'E' && phase === 'room') {
  e.preventDefault()
- handleEndCall()
+ confirmEndCall()
  }
  }
 
  window.addEventListener('keydown', handleKeyPress)
  return () => window.removeEventListener('keydown', handleKeyPress)
- }, [phase, handleEndCall])
+ }, [phase, confirmEndCall])
 
  useEffect(() => {
  if (roomId === 'new') {
@@ -175,7 +185,8 @@ export default function RoomPage() {
  }, [])
 
  const { language, setLanguage, bindToMonaco } = useYjsEditor(resolvedRoomId, socket, editorRef, onStuckDetected)
- const { remoteStreams, peerMediaStates, connectionStates, isScreenSharing, startScreenShare, stopScreenShare, syncLocalStream } = useWebRTC(resolvedRoomId, socket, localStream)
+ const { remoteStreams, peerMediaStates, connectionStates, isScreenSharing, startScreenShare, stopScreenShare, syncLocalStream, getPeers } = useWebRTC(resolvedRoomId, socket, localStream)
+ const { videoQuality } = useBandwidthAdaptive(getPeers, localStream)
 
  const handleJoin = async ({ role, isMuted, isVideoOff }) => {
  if (!resolvedRoomId) return
@@ -251,6 +262,7 @@ export default function RoomPage() {
  navigate(`/room/${canonicalRoomId}`, { replace: true })
  }
  socket.emit('join-room', { roomId: canonicalRoomId, role, username: user?.username })
+ sessionStartRef.current = Date.now()
  setPhase('room')
  } catch (err) {
  hasJoinedRef.current = false
@@ -332,12 +344,36 @@ export default function RoomPage() {
  editorRef={editorRef}
  bindToMonaco={bindToMonaco}
  userRole={userRole}
- onEndCall={handleEndCall}
+ videoQuality={videoQuality}
+ onEndCall={confirmEndCall}
  isEnding={isEnding}
  />
  </>
  )}
  {phase === 'room' && <KeyboardShortcutsCheatSheet />}
+ {showEndConfirm && (
+ <div className="fixed inset-0 z-[60] bg-black/60 backdrop-blur-sm flex items-center justify-center" onClick={() => setShowEndConfirm(false)}>
+ <div className="bg-bg-surface border border-border-default rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+ <h3 className="text-lg font-bold text-text-primary mb-2">End Session?</h3>
+ <p className="text-sm text-text-muted mb-6">This will end the coding session for all participants. You'll be redirected to your AI-generated debrief with performance analysis and improvement tips.</p>
+ <div className="flex gap-3">
+ <button
+ onClick={() => setShowEndConfirm(false)}
+ className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-text-secondary bg-bg-elevated hover:bg-bg-overlay border border-border-default transition-all"
+ >
+ Cancel
+ </button>
+ <button
+ onClick={() => handleEndCall()}
+ disabled={isEnding}
+ className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-500 disabled:opacity-50 transition-all"
+ >
+ {isEnding ? 'Ending...' : 'End Session'}
+ </button>
+ </div>
+ </div>
+ </div>
+ )}
  </ErrorBoundary>
  )
 }

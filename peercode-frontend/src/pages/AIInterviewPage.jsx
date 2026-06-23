@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Helmet } from 'react-helmet-async'
-import { Joyride } from 'react-joyride'
+import Joyride from 'react-joyride'
 import { useNavigate } from 'react-router-dom'
 import {
  Bot, Upload, Building2, Brain, MessageSquare, Code2,

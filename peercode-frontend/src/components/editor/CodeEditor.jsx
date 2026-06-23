@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useCallback } from 'react'
 import MonacoEditor from '@monaco-editor/react'
 import Spinner from '../common/Spinner'
 import { useTheme } from '../../context/ThemeContext'
@@ -112,7 +112,9 @@ export default function CodeEditor({
  onChange,
  readOnly = false,
  onMount,
- height = '100%'
+ height = '100%',
+ typingSpeed,
+ remoteTypingSpeeds,
 }) {
  const editorRef = useRef(null)
  const monacoRef = useRef(null)
@@ -146,8 +148,10 @@ export default function CodeEditor({
  if (onMount) onMount(editor, monaco)
  }
 
+ const hasRemoteTypers = remoteTypingSpeeds && Object.keys(remoteTypingSpeeds).length > 0
+
  return (
- <div className="w-full h-full">
+ <div className="w-full h-full relative">
  <MonacoEditor
  height={height}
  language={language}
@@ -179,6 +183,26 @@ export default function CodeEditor({
  quickSuggestions: { other: true, comments: false, strings: false }
  }}
  />
+
+ {/* Typing speed indicators */}
+ {(typingSpeed > 0 || hasRemoteTypers) && (
+   <div className="absolute top-2 right-2 z-10 flex flex-col gap-1 pointer-events-none">
+     {typingSpeed > 0 && (
+       <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-bg-surface/90 backdrop-blur-sm border border-border-default text-[10px] font-mono tabular-nums">
+         <span className="text-indigo-400">You</span>
+         <span className="text-text-muted">{typingSpeed} WPM</span>
+       </div>
+     )}
+     {hasRemoteTypers && Object.entries(remoteTypingSpeeds).map(([sid, data]) => (
+       data.wpm > 0 && (
+         <div key={sid} className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-bg-surface/90 backdrop-blur-sm border border-border-default text-[10px] font-mono tabular-nums">
+           <span className="text-pink-400">{data.username || 'Peer'}</span>
+           <span className="text-text-muted">{data.wpm} WPM</span>
+         </div>
+       )
+     ))}
+   </div>
+ )}
  </div>
  )
 }

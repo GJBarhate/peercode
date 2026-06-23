@@ -12,6 +12,9 @@ import AIHintPanel from '../gemini/AIHintPanel'
 import InterviewTimer from './InterviewTimer'
 import InterviewerNotes from './InterviewerNotes'
 import ParticipantList from './ParticipantList'
+import ConnectionQualityIndicator from '../common/ConnectionQualityIndicator'
+import { useRemoteCursors } from '../../hooks/useRemoteCursors'
+import { useTypingSpeed } from '../../hooks/useTypingSpeed'
 import { LayoutGrid, MessageSquare, Users, ChevronRight, ChevronLeft, Lightbulb, Search, X, MessageCircle, XCircle, Video } from 'lucide-react'
 import { getProblems, getErrorMessage } from '../../services/api'
 import { STARTER_CODE } from '../../utils/codeTemplates'
@@ -35,6 +38,7 @@ export default function RoomLayout({
  editorRef,
  bindToMonaco,
  userRole,
+ videoQuality,
  onEndCall,
  isEnding
 }) {
@@ -60,6 +64,11 @@ export default function RoomLayout({
  const [mobilePanel, setMobilePanel] = useState(null)
  const codeRef = useRef(PROBLEM_STARTER_CODE[problemSlug]?.[language] || STARTER_CODE[language] || '')
  const searchTimeoutRef = useRef(null)
+ const [monacoEditor, setMonacoEditor] = useState(null)
+ const [monacoInstance, setMonacoInstance] = useState(null)
+
+ useRemoteCursors(monacoEditor, monacoInstance, socket, roomId)
+ const { localWPM, remoteTypingSpeeds } = useTypingSpeed(monacoEditor, socket, roomId)
 
  const remoteScreenSharing = Object.values(peerMediaStates).some(s => s.isScreenSharing)
 
@@ -156,8 +165,10 @@ export default function RoomLayout({
  }
  }
 
- const handleEditorMount = (editor) => {
+ const handleEditorMount = (editor, monaco) => {
  editorRef.current = editor
+ setMonacoEditor(editor)
+ if (monaco) setMonacoInstance(monaco)
  const model = editor.getModel()
 
  if (model && !model.getValue().trim()) {
@@ -297,7 +308,8 @@ export default function RoomLayout({
  participants={participants}
  isScreenSharing={isScreenSharing}
  isMaximized={videoMaximized}
- onEndCall={onEndCall}
+ videoQuality={videoQuality}
+ onEndCall={() => onEndCall?.({ finalCode: codeRef.current, finalLanguage: language, roomId })}
  onMinimize={() => setVideoControlsOpen(false)}
  onMaximize={() => setVideoMaximized(v => !v)}
  onScreenShare={onScreenShare}
@@ -381,6 +393,7 @@ export default function RoomLayout({
  }`}>
  {userRole === 'interviewer' ? '👔 Interviewer' : '👨‍💼 Interviewee'}
  </span>
+ <ConnectionQualityIndicator />
  <div className="flex-1 min-w-0" />
  <button
  onClick={() => setShowProblemSearch(true)}
@@ -392,7 +405,7 @@ export default function RoomLayout({
  </button>
  <InterviewTimer
  isInterviewer={userRole === 'interviewer'}
- onTimerEnd={onEndCall}
+ onTimerEnd={() => onEndCall?.({ finalCode: codeRef.current, finalLanguage: language, roomId })}
  onPhaseChange={() => {}}
  socket={socket}
  roomId={roomId}
@@ -429,6 +442,8 @@ export default function RoomLayout({
  language={language}
  onMount={handleEditorMount}
  height="100%"
+ typingSpeed={localWPM}
+ remoteTypingSpeeds={remoteTypingSpeeds}
  />
  </div>
 

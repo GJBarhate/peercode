@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
 
+const INTERACTIVE_SELECTOR = 'a, button, [role="button"], input, textarea, select'
+
 export default function CustomCursor() {
  const dotRef = useRef(null)
 
@@ -13,28 +15,22 @@ export default function CustomCursor() {
  dot.style.top = `${e.clientY}px`
  }
 
- const addActive = () => dot.classList.add('active')
- const removeActive = () => dot.classList.remove('active')
+ // Use event delegation instead of per-element listeners to avoid memory leaks
+ const handleOver = (e) => {
+ if (e.target.closest(INTERACTIVE_SELECTOR)) dot.classList.add('active')
+ }
+ const handleOut = (e) => {
+ if (e.target.closest(INTERACTIVE_SELECTOR)) dot.classList.remove('active')
+ }
 
  document.addEventListener('mousemove', move)
- document.querySelectorAll('a, button, [role="button"], input, textarea, select').forEach(el => {
- el.addEventListener('mouseenter', addActive)
- el.addEventListener('mouseleave', removeActive)
- })
-
- const observer = new MutationObserver(() => {
- document.querySelectorAll('a, button, [role="button"], input, textarea, select').forEach(el => {
- el.removeEventListener('mouseenter', addActive)
- el.removeEventListener('mouseleave', removeActive)
- el.addEventListener('mouseenter', addActive)
- el.addEventListener('mouseleave', removeActive)
- })
- })
- observer.observe(document.body, { childList: true, subtree: true })
+ document.addEventListener('mouseover', handleOver)
+ document.addEventListener('mouseout', handleOut)
 
  return () => {
  document.removeEventListener('mousemove', move)
- observer.disconnect()
+ document.removeEventListener('mouseover', handleOver)
+ document.removeEventListener('mouseout', handleOut)
  }
  }, [])
 

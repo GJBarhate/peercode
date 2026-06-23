@@ -177,6 +177,28 @@ async function resolveReport(req, res) {
   res.json(report);
 }
 
+async function getErrorLogs(req, res) {
+  const fs = require('fs');
+  const path = require('path');
+  const LOG_DIR = process.env.LOG_DIR || path.join(process.cwd(), 'logs');
+  const lines = parseInt(req.query.lines || '100', 10);
+  const logFile = req.query.type === 'combined'
+    ? path.join(LOG_DIR, 'combined.log')
+    : path.join(LOG_DIR, 'error.log');
+
+  try {
+    if (!fs.existsSync(logFile)) {
+      return res.json({ logs: [], message: 'No log file found' });
+    }
+    const content = fs.readFileSync(logFile, 'utf-8');
+    const allLines = content.trim().split('\n').filter(Boolean);
+    const tail = allLines.slice(-Math.min(lines, 500));
+    res.json({ logs: tail, total: allLines.length });
+  } catch (err) {
+    return fail(res, 500, 'Failed to read logs');
+  }
+}
+
 module.exports = {
   getStats,
   getUsers,
@@ -186,4 +208,5 @@ module.exports = {
   deleteProblem,
   getReports,
   resolveReport,
+  getErrorLogs,
 };

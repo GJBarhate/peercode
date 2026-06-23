@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Helmet } from 'react-helmet-async'
-import { Joyride } from 'react-joyride'
+import Joyride from 'react-joyride'
 import { Link } from 'react-router-dom'
 import { Trophy, Clock, Calendar, Users, ChevronRight, History, Medal, Zap } from 'lucide-react'
 import ErrorState from '../components/common/ErrorState'

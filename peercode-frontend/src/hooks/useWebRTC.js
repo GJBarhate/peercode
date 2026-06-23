@@ -388,5 +388,7 @@ export function useWebRTC(roomId, socket, localStream) {
  }
  }, [createPeerConnection, socket])
 
- return { remoteStreams, peerMediaStates, connectionStates, isScreenSharing, createOffer, hangUp, startScreenShare, stopScreenShare, syncLocalStream }
+ const getPeers = useCallback(() => ({ ...peers.current }), [])
+
+ return { remoteStreams, peerMediaStates, connectionStates, isScreenSharing, createOffer, hangUp, startScreenShare, stopScreenShare, syncLocalStream, getPeers }
 }

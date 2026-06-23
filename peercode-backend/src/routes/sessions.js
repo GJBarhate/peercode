@@ -2,6 +2,7 @@
 
 const express = require('express');
 const router = express.Router();
+const auth = require('../middleware/auth');
 const {
   getSession,
   getPlayback,
@@ -11,11 +12,11 @@ const {
   getUserSessions,
 } = require('../controllers/sessionController');
 
-router.get('/', getUserSessions);
-router.get('/:roomId', getSession);
-router.get('/:roomId/playback', getPlayback);
-router.post('/:roomId/end', endSession);
-router.get('/:roomId/debrief', getDebrief);
-router.get('/:roomId/analytics', getAnalytics);
+router.get('/', auth, getUserSessions);
+router.get('/:roomId', auth, getSession);
+router.get('/:roomId/playback', auth, getPlayback);
+router.post('/:roomId/end', auth, endSession);
+router.get('/:roomId/debrief', auth, getDebrief);
+router.get('/:roomId/analytics', auth, getAnalytics);
 
 module.exports = router;

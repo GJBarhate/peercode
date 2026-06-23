@@ -195,32 +195,38 @@ module.exports = function (io) {
 
         await Room.findOneAndUpdate({ roomId }, { $set: { status: 'completed' } });
 
-        const session = await Session.findOne({ roomId });
-        if (session) {
-          if (!session.endTime) {
-            session.endTime = new Date();
-            session.duration = session.startTime
-              ? Math.max(0, Math.round((session.endTime - session.startTime) / 60000))
-              : 0;
-          }
-          session.status = 'completed';
-          if (finalCode) session.finalCode = finalCode;
-          if (finalLanguage) session.finalLanguage = finalLanguage;
-          session.isRecording = false;
-          await session.save();
+        const now = new Date();
+        const session = await Session.findOneAndUpdate(
+          { roomId },
+          {
+            $set: {
+              status: 'completed',
+              isRecording: false,
+              endTime: now,
+              ...(finalCode && { finalCode }),
+              ...(finalLanguage && { finalLanguage }),
+            },
+            $setOnInsert: {
+              roomId,
+              startTime: now,
+              participants: socket.user?.id ? [socket.user.id] : [],
+            },
+          },
+          { upsert: true, new: true }
+        );
 
-          // Queue AI debrief generation using all session participants
-          const participantIds = (session.participants || []).map(p => p.toString ? p.toString() : String(p));
-          if (participantIds.length > 0) {
-            try {
-              await agenda.now('ai-debrief', {
-                roomId,
-                participantIds,
-              });
-              logger.info(`Queued ai-debrief for room ${roomId} with ${participantIds.length} participants`);
-            } catch (jobErr) {
-              logger.error('Failed to queue debrief job:', jobErr.message);
-            }
+        if (session.startTime && !session.duration) {
+          session.duration = Math.max(0, Math.round((now - session.startTime) / 60000));
+          await session.save();
+        }
+
+        const participantIds = (session.participants || []).map(p => p.toString ? p.toString() : String(p));
+        if (participantIds.length > 0) {
+          try {
+            await agenda.now('ai-debrief', { roomId, participantIds });
+            logger.info(`Queued ai-debrief for room ${roomId} with ${participantIds.length} participants`);
+          } catch (jobErr) {
+            logger.error('Failed to queue debrief job:', jobErr.message);
           }
         }
 

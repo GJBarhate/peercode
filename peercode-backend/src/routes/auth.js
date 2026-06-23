@@ -10,7 +10,7 @@ const { register, login, refresh, logout, verifyOTP, resendOTP, googleAuth, link
 router.post('/register', authLimiter, validate(schemas.register), register);
 router.post('/login', authLimiter, validate(schemas.login), login);
 router.post('/refresh', refreshLimiter, refresh);
-router.post('/logout', logout);
+router.post('/logout', authLimiter, logout);
 router.post('/verify-otp', authLimiter, validate(schemas.verifyOTP), verifyOTP);
 router.post('/resend-otp', authLimiter, validate(schemas.resendOTP), resendOTP);
 router.post('/google', googleAuthLimiter, googleAuth);

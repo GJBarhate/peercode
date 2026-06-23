@@ -51,7 +51,7 @@ async function generateDebrief(req, res) {
     const problemTitle = session.problemSnapshot?.title || session.problem?.title || 'Unknown Problem';
     const difficulty = session.problemSnapshot?.difficulty || session.problem?.difficulty || 'unknown';
     const code = session.finalCode || '';
-    const duration = Math.round((session.duration || 0) / 60); // Convert to minutes
+    const duration = session.duration || 0;
     const language = session.finalLanguage || 'Unknown';
 
     const prompt = `You are a senior software engineer. Analyze this mock interview session and provide constructive feedback.

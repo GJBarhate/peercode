@@ -12,6 +12,7 @@ const {
   deleteProblem,
   getReports,
   resolveReport,
+  getErrorLogs,
 } = require('../controllers/adminController');
 
 router.use(adminAuth);
@@ -24,5 +25,6 @@ router.put('/problems/:id', updateProblem);
 router.delete('/problems/:id', deleteProblem);
 router.get('/reports', getReports);
 router.put('/reports/:id/resolve', resolveReport);
+router.get('/logs', getErrorLogs);
 
 module.exports = router;

@@ -24,7 +24,7 @@
     "react-dom": "18.2.0",
     "react-helmet-async": "^3.0.0",
     "react-hot-toast": "2.4.1",
-    "react-joyride": "^3.1.0",
+    "react-joyride": "^2.9.3",
     "react-router-dom": "6.21.0",
     "react-type-animation": "^3.2.0",
     "react-window": "^2.2.7",
@@ -47,8 +47,14 @@
     "vite": "5.0.0"
   },
   "lint-staged": {
-    "src/**/*.{js,jsx}": ["prettier --write"],
-    "src/**/*.{css,scss}": ["prettier --write"],
-    "*.{json,md}": ["prettier --write"]
+    "src/**/*.{js,jsx}": [
+      "prettier --write"
+    ],
+    "src/**/*.{css,scss}": [
+      "prettier --write"
+    ],
+    "*.{json,md}": [
+      "prettier --write"
+    ]
   }
 }

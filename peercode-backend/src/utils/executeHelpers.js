@@ -293,7 +293,7 @@ function wrapDesignProblem(code, language, langId) {
 
   if (langId === 93 || langId === 74) { // JavaScript / TypeScript
     const tsPrefix = langId === 74
-      ? 'declare var require: any;\ndeclare var process: any;\nexport {};\n\n'
+      ? '/// <reference lib="es2015" />\ndeclare var require: any;\ndeclare var process: any;\nexport {};\n\n'
       : '';
     return tsPrefix + code + `
 
@@ -406,17 +406,8 @@ func main() {
 `;
   }
 
-  if (langId === 54) { // C++
-    return `
-#include <bits/stdc++.h>
-using namespace std;
-${code}
-int main() {
-  string in, l; while (getline(cin, l)) in += l;
-  cout << "[]" << endl;
-  return 0;
-}
-`;
+  if (langId === 54) { // C++ — handled below
+    // fall through to the real C++ wrapper
   }
 
   // Fallback for C
@@ -437,7 +428,7 @@ function wrapCodeForTest(code, language, functionName, hasSolutionClass) {
   if (langId === 93 || langId === 74) {
     // TypeScript needs type declarations for Node.js APIs
     const tsPrefix = langId === 74
-      ? 'declare var require: any;\ndeclare var process: any;\nexport {};\n\n'
+      ? '/// <reference lib="es2015" />\ndeclare var require: any;\ndeclare var process: any;\nexport {};\n\n'
       : '';
     const callPrefix = langId === 74 ? '(' + fnName + ' as any)' : fnName;
     return `
@@ -492,6 +483,7 @@ except Exception as e:
   }
 
   if (langId === 54) {
+    const cppPrefix = hasSolutionClass ? 'sol.' : '';
     return `
 #include <bits/stdc++.h>
 using namespace std;
@@ -541,6 +533,16 @@ struct Json { int type; // 0=null 1=bool 2=num 3=str 4=arr
   vector<string> asStrVec() const { vector<string> r; if(type==4) for(auto& v:arr) r.push_back(v.asStr()); return r; }
 };
 
+// toString for return types
+string toStr(int v) { return to_string(v); }
+string toStr(long long v) { return to_string(v); }
+string toStr(bool v) { return v ? "true" : "false"; }
+string toStr(const string& v) { return '"' + v + '"'; }
+string toStr(const vector<int>& v) { string r="["; for(int i=0;i<(int)v.size();i++){if(i>0)r+=",";r+=to_string(v[i]);} return r+"]"; }
+string toStr(const vector<vector<int>>& v) { string r="["; for(int i=0;i<(int)v.size();i++){if(i>0)r+=",";r+=toStr(v[i]);} return r+"]"; }
+string toStr(const vector<vector<char>>& v) { string r="["; for(int i=0;i<(int)v.size();i++){if(i>0)r+=",";r+="[";for(int j=0;j<(int)v[i].size();j++){if(j>0)r+=",";r+='"'+string(1,v[i][j])+'"';}r+="]";} return r+"]"; }
+string toStr(const vector<string>& v) { string r="["; for(int i=0;i<(int)v.size();i++){if(i>0)r+=",";r+=toStr(v[i]);} return r+"]"; }
+
 ${code}
 
 int main() {
@@ -548,7 +550,7 @@ int main() {
   string input, line;
   while (getline(cin, line)) input += line;
   auto json = Json::parse(input);
-  Solution sol;
+  ${hasSolutionClass ? 'Solution sol;' : '/*no class*/'}
 
   // Call function with JSON-parsed args based on problem type
   auto result = [&]() -> string {
@@ -556,64 +558,64 @@ int main() {
       auto& args = json.arr;
       // Try 2D char array (numIslands)
       if (args[0].type == 4 && !args[0].arr.empty() && args[0].arr[0].type == 4 && args[0].arr[0].arr[0].type == 3) {
-        auto val = sol.${fnName}(args[0].asCharVecVec());
-        stringstream ss; ss << val; return ss.str();
+        auto val = ${cppPrefix}${fnName}(args[0].asCharVecVec());
+        return toStr(val);
       }
       // Try 2D int array (merge, threeSum, rotateImage)
       if (args[0].type == 4 && !args[0].arr.empty() && args[0].arr[0].type == 4) {
         if (args.size() == 1) {
-          auto val = sol.${fnName}(args[0].asIntVecVec());
-          stringstream ss; ss << val; return ss.str();
+          auto val = ${cppPrefix}${fnName}(args[0].asIntVecVec());
+          return toStr(val);
         }
         if (args.size() == 2) {
-          auto val = sol.${fnName}(args[0].asIntVecVec(), args[1].asInt());
-          stringstream ss; ss << val; return ss.str();
+          auto val = ${cppPrefix}${fnName}(args[0].asIntVecVec(), args[1].asInt());
+          return toStr(val);
         }
       }
       // Try int array + int (coinChange, twoSum)
       if (args[0].type == 4 && args[0].arr[0].type == 2) {
         if (args.size() == 1) {
-          auto val = sol.${fnName}(args[0].asIntVec());
-          stringstream ss; ss << val; return ss.str();
+          auto val = ${cppPrefix}${fnName}(args[0].asIntVec());
+          return toStr(val);
         }
         if (args.size() == 2) {
-          auto val = sol.${fnName}(args[0].asIntVec(), args[1].asInt());
-          stringstream ss; ss << val; return ss.str();
+          auto val = ${cppPrefix}${fnName}(args[0].asIntVec(), args[1].asInt());
+          return toStr(val);
         }
         if (args.size() == 3) {
-          auto val = sol.${fnName}(args[0].asIntVec(), args[1].asInt(), args[2].asInt());
-          stringstream ss; ss << val; return ss.str();
+          auto val = ${cppPrefix}${fnName}(args[0].asIntVec(), args[1].asInt(), args[2].asInt());
+          return toStr(val);
         }
       }
       // Try string + string array (wordBreak, ladderLength)
       if (args[0].type == 3 && args.size() >= 2 && args[1].type == 4) {
-        auto val = sol.${fnName}(args[0].asStr(), args[1].asStrVec());
-        stringstream ss; ss << val; return ss.str();
+        auto val = ${cppPrefix}${fnName}(args[0].asStr(), args[1].asStrVec());
+        return toStr(val);
       }
       // Try string + string + string array (ladderLength with 3 params)
       if (args[0].type == 3 && args.size() >= 2 && args[1].type == 3) {
         if (args.size() == 2) {
-          auto val = sol.${fnName}(args[0].asStr(), args[1].asStr());
-          stringstream ss; ss << val; return ss.str();
+          auto val = ${cppPrefix}${fnName}(args[0].asStr(), args[1].asStr());
+          return toStr(val);
         }
         if (args.size() == 3) {
-          auto val = sol.${fnName}(args[0].asStr(), args[1].asStr(), args[2].asStrVec());
-          stringstream ss; ss << val; return ss.str();
+          auto val = ${cppPrefix}${fnName}(args[0].asStr(), args[1].asStr(), args[2].asStrVec());
+          return toStr(val);
         }
       }
       // Try single string
       if (args[0].type == 3) {
-        auto val = sol.${fnName}(args[0].asStr());
-        stringstream ss; ss << val; return ss.str();
+        auto val = ${cppPrefix}${fnName}(args[0].asStr());
+        return toStr(val);
       }
       // Try single int (climbStairs)
       if (args[0].type == 2) {
-        auto val = sol.${fnName}(args[0].asInt());
-        stringstream ss; ss << val; return ss.str();
+        auto val = ${cppPrefix}${fnName}(args[0].asInt());
+        return toStr(val);
       }
     }
-    auto val = sol.${fnName}();
-    stringstream ss; ss << val; return ss.str();
+    auto val = ${cppPrefix}${fnName}();
+    return toStr(val);
   }();
   cout << result << endl;
   return 0;
@@ -645,6 +647,8 @@ int main() {
   }
 
   if (langId === 106) {
+    const goPrefix = hasSolutionClass ? 'sol.' : '';
+    const goNeedSort = fnName === 'threeSum' || fnName === 'merge';
     return `
 package main
 
@@ -652,7 +656,8 @@ import (
   "bufio"
   "encoding/json"
   "fmt"
-  "os"
+  "os"${goNeedSort ? '\n  "sort"' : ''}
+  "sort"
 )
 
 ${code}
@@ -721,30 +726,30 @@ func main() {
   var input string
   for scanner.Scan() { input += scanner.Text() }
   parsed := parseJson(input)
-  sol := Solution{}
+  ${hasSolutionClass ? 'sol := Solution{}' : ''}
 
   var result interface{}
   if parsed.typ == 4 && len(parsed.arr) > 0 {
     args := parsed.arr
     if args[0].typ == 4 && len(args[0].arr) > 0 && args[0].arr[0].typ == 4 && len(args[0].arr[0].arr) > 0 && args[0].arr[0].arr[0].typ == 3 {
-      result = sol.${fnName}(args[0].asCharVecVec())
+      result = ${goPrefix}${fnName}(args[0].asCharVecVec())
     } else if args[0].typ == 4 && len(args[0].arr) > 0 && args[0].arr[0].typ == 4 {
-      if len(args) == 1 { result = sol.${fnName}(args[0].asIntVecVec()) }
+      if len(args) == 1 { result = ${goPrefix}${fnName}(args[0].asIntVecVec()) }
     } else if args[0].typ == 4 && len(args[0].arr) > 0 && args[0].arr[0].typ == 2 {
-      if len(args) == 1 { result = sol.${fnName}(args[0].asIntVec()) }
-      if len(args) == 2 { result = sol.${fnName}(args[0].asIntVec(), args[1].asInt()) }
+      if len(args) == 1 { result = ${goPrefix}${fnName}(args[0].asIntVec()) }
+      if len(args) == 2 { result = ${goPrefix}${fnName}(args[0].asIntVec(), args[1].asInt()) }
     } else if args[0].typ == 3 && len(args) >= 2 && args[1].typ == 4 {
-      result = sol.${fnName}(args[0].asStr(), args[1].asStrVec())
+      result = ${goPrefix}${fnName}(args[0].asStr(), args[1].asStrVec())
     } else if args[0].typ == 3 && len(args) >= 2 && args[1].typ == 3 {
-      if len(args) == 2 { result = sol.${fnName}(args[0].asStr(), args[1].asStr()) }
-      if len(args) == 3 { result = sol.${fnName}(args[0].asStr(), args[1].asStr(), args[2].asStrVec()) }
+      if len(args) == 2 { result = ${goPrefix}${fnName}(args[0].asStr(), args[1].asStr()) }
+      if len(args) == 3 { result = ${goPrefix}${fnName}(args[0].asStr(), args[1].asStr(), args[2].asStrVec()) }
     } else if args[0].typ == 3 {
-      result = sol.${fnName}(args[0].asStr())
+      result = ${goPrefix}${fnName}(args[0].asStr())
     } else if args[0].typ == 2 {
-      result = sol.${fnName}(args[0].asInt())
+      result = ${goPrefix}${fnName}(args[0].asInt())
     }
   } else {
-    result = sol.${fnName}()
+    result = ${goPrefix}${fnName}()
   }
   fmt.Print(toJsonStr(result))
 }
@@ -768,7 +773,7 @@ function buildCodeFromHarness(problem, language, userCode, testInput) {
     return null;
   }
   let escaped = testInput;
-  if (language === 'java' || language === 'cpp') {
+  if (language === 'java' || language === 'cpp' || language === 'go') {
     escaped = escaped.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r\n/g, '\\n').replace(/\r/g, '\\n').replace(/\n/g, '\\n');
   }
   code = code.replace(/__TEST_INPUT__/g, escaped);
