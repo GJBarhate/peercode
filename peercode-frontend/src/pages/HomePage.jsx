@@ -60,11 +60,15 @@ export default function HomePage() {
  return
  }
  } else {
- const res = await register(formData.username, formData.email, formData.password)
+  const res = await register(formData.username, formData.email, formData.password)
   if (res.requiresVerification) {
   setShowOTP(true)
   setRegisteredEmail(formData.email)
+  if (res.fallbackOtp) {
+  toast('Email unavailable — Your OTP: ' + res.fallbackOtp, { icon: '🔑', duration: 30000 })
+  } else {
   toast.success('Registration successful! Check your email for the verification code.')
+  }
   }
  }
  } catch (err) {
@@ -72,7 +76,11 @@ export default function HomePage() {
   if (err.response?.status === 403 && err.response?.data?.requiresVerification) {
   setShowOTP(true)
   setRegisteredEmail(err.response.data.email || formData.email)
+  if (err.response?.data?.fallbackOtp) {
+  toast('Email unavailable — Your OTP: ' + err.response.data.fallbackOtp, { icon: '🔑', duration: 30000 })
+  } else {
   toast('Account not verified. A new code has been sent to your email.', { icon: '📧' })
+  }
   } else if (err.response?.status === 401 || err.response?.status === 400) {
  toast.error('Invalid credentials')
  } else if (err.response?.status === 409) {

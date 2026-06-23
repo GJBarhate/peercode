@@ -103,10 +103,15 @@ async function register(req, res) {
 
   // In development, always allow registration (delete existing user if any)
   const normalizedEmail = email.toLowerCase().trim();
+
+  // Check for existing user
+  const existingUser = await User.findOne({ email: normalizedEmail });
+
   if (process.env.NODE_ENV === 'development') {
-    await User.deleteOne({ email: normalizedEmail });
+    // Dev: always allow fresh registration
+    if (existingUser) await User.deleteOne({ email: normalizedEmail });
   } else {
-    const existingUser = await User.findOne({ email: normalizedEmail });
+    // Production: block re-registration of verified users
     if (existingUser && existingUser.verified) {
       return fail(res, 409, 'Email already registered');
     }
@@ -116,18 +121,30 @@ async function register(req, res) {
   const otp = generateOTP();
   const otpExpires = new Date(Date.now() + 3 * 60 * 1000);
 
-  const user = await User.create({
-    username,
-    email: normalizedEmail,
-    passwordHash,
-    verified: false,
-    emailVerificationToken: otp,
-    emailVerificationExpires: otpExpires,
-  });
+  let user;
+  if (existingUser && !existingUser.verified) {
+    // Update existing unverified user instead of crashing on duplicate
+    existingUser.username = username;
+    existingUser.passwordHash = passwordHash;
+    existingUser.emailVerificationToken = otp;
+    existingUser.emailVerificationExpires = otpExpires;
+    user = await existingUser.save();
+  } else {
+    user = await User.create({
+      username,
+      email: normalizedEmail,
+      passwordHash,
+      verified: false,
+      emailVerificationToken: otp,
+      emailVerificationExpires: otpExpires,
+    });
+  }
 
+  let emailFailed = false;
   try {
     await sendOTPEmail(user, otp);
   } catch (err) {
+    emailFailed = true;
     logger.error('Failed to send OTP email:', err);
   }
 
@@ -135,6 +152,10 @@ async function register(req, res) {
     message: 'Registration successful. Please check your email for the verification code.',
     requiresVerification: true,
   };
+  if (emailFailed) {
+    response.fallbackOtp = otp;
+    response.message = 'Email service unavailable. Use the fallback code below to verify.';
+  }
   res.status(201).json(response);
 }
 
@@ -205,6 +226,7 @@ async function login(req, res) {
       error: 'Account not verified. A new verification code has been sent to your email.',
       requiresVerification: true,
       email: user.email,
+      fallbackOtp: otp,
     });
   }
 
