@@ -15,7 +15,13 @@ module.exports = function defineAiDebriefJob(agenda) {
     if (!participantIds || participantIds.length === 0) return;
 
     const existing = await AiDebrief.findOne({ roomId });
-    if (existing) {
+    if (existing && !existing.isFallback) {
+      // Link to session if not already linked
+      const session0 = await Session.findOne({ roomId });
+      if (session0 && !session0.debrief) {
+        session0.debrief = existing._id;
+        await session0.save();
+      }
       logger.info(`AI Debrief: already exists for roomId ${roomId}, skipping`);
       return;
     }
@@ -31,10 +37,10 @@ module.exports = function defineAiDebriefJob(agenda) {
     // Fetch snapshots from separate collection
     const snapshots = await Snapshot.find({ sessionId: session._id }).sort({ timestamp: 1 });
     const firstCode = snapshots.length > 0 ? (snapshots[0].code || '') : '';
-    const lastCode = snapshots.length > 0 ? (snapshots[snapshots.length - 1].code || '') : '';
+    const lastCode = session.finalCode || (snapshots.length > 0 ? (snapshots[snapshots.length - 1].code || '') : '');
 
-    const problemTitle = room && room.problemId ? room.problemId.title : 'Unknown Problem';
-    const problemDifficulty = room && room.problemId ? room.problemId.difficulty : 'unknown';
+    const problemTitle = session.problemSnapshot?.title || (room && room.problemId ? room.problemId.title : 'Unknown Problem');
+    const problemDifficulty = session.problemSnapshot?.difficulty || (room && room.problemId ? room.problemId.difficulty : 'unknown');
     const duration = session.duration || 0;
 
     const prompt = `You are an expert technical interview coach. Analyze this coding session and respond ONLY with valid JSON, no markdown, no extra text.
@@ -85,6 +91,7 @@ Return this exact JSON structure (fill every field):
       logger.error('AI Debrief: failed to parse Gemini response:', err.message);
       // Use fallback debrief with default scores
       parsed = {
+        isFallback: true,
         communication_score: 3,
         decomposition_score: 3,
         code_quality_score: 3,
@@ -95,17 +102,18 @@ Return this exact JSON structure (fill every field):
         areas_to_improve: ['Code clarity', 'Edge case handling', 'Time complexity awareness'],
         study_next: ['Arrays', 'Hash Maps', 'Dynamic Programming'],
         weak_topics: ['optimization', 'edge cases'],
-        summary: 'Session analysis is being generated. Please check back shortly.',
-        time_complexity: 'O(n) — estimated',
-        space_complexity: 'O(1) — estimated',
-        approach_analysis: 'Unable to analyze approach — please try regenerating.',
-        interviewer_perspective: 'Analysis unavailable.',
-        improvement_plan: ['Review the problem statement carefully', 'Test edge cases', 'Optimize after correctness'],
+        summary: 'AI analysis unavailable at this time. Please try again later.',
+        time_complexity: '',
+        space_complexity: '',
+        approach_analysis: '',
+        interviewer_perspective: '',
+        improvement_plan: [],
         similar_problems: [],
       };
     }
 
     // Save debriefs for all participants with cache expiration
+    let firstDebriefId = null;
     for (const participantId of participantIds) {
       try {
         const debrief = await AiDebrief.findOneAndUpdate(
@@ -115,6 +123,7 @@ Return this exact JSON structure (fill every field):
               sessionId: session._id,
               roomId,
               generatedFor: participantId,
+              isFallback: parsed.isFallback || false,
               scores: {
                 communication: parsed.communication_score,
                 decomposition: parsed.decomposition_score,
@@ -141,6 +150,7 @@ Return this exact JSON structure (fill every field):
           { upsert: true, new: true }
         );
 
+        if (!firstDebriefId) firstDebriefId = debrief._id;
         logger.info(`AI Debrief saved for user ${participantId} - readiness: ${parsed.overall_readiness}/10`);
 
         // Update user weakness profile for recommendation engine
@@ -155,6 +165,17 @@ Return this exact JSON structure (fill every field):
         }
       } catch (err) {
         logger.error(`AI Debrief: error saving debrief for user ${participantId}:`, err.message);
+      }
+    }
+
+    // Link debrief to session so getDebrief can find it
+    if (firstDebriefId && !session.debrief) {
+      try {
+        session.debrief = firstDebriefId;
+        await session.save();
+        logger.info(`Linked debrief ${firstDebriefId} to session ${session._id}`);
+      } catch (err) {
+        logger.error('AI Debrief: failed to link debrief to session:', err.message);
       }
     }
   });

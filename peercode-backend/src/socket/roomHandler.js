@@ -438,13 +438,16 @@ module.exports = function(io) {
 
         // Queue debrief generation job
         try {
-          // Filter to only include interviewer and interviewee (not observers)
           const matchedPair = room.participants.filter(p =>
             p.role === 'interviewer' || p.role === 'interviewee'
           ).map(p => p.userId);
+          // Fall back to all participants when roles aren't assigned
+          const debriefParticipants = matchedPair.length > 0
+            ? matchedPair
+            : room.participants.map(p => p.userId).filter(Boolean);
           await agenda.now('ai-debrief', {
             roomId,
-            participantIds: matchedPair
+            participantIds: debriefParticipants
           });
           logger.info(`Queued AI debrief for session ${session._id}`);
         } catch (jobErr) {

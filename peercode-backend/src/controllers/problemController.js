@@ -107,10 +107,28 @@ async function getProblem(req, res) {
   const query = isObjectId
     ? { $or: [{ slug }, { _id: slug }], isActive: true }
     : { slug, isActive: true }
-  const problem = await Problem.findOne(query).select('-hiddenTests')
+  const problem = await Problem.findOne(query).select('-hiddenTests').lean()
   if (!problem) {
     return fail(res, 404, 'Problem not found')
   }
+
+  const statsMap = await aggregateProblemStats()
+  const stats = statsMap.get(String(problem._id)) || { totalSubmissions: 0, passedSubmissions: 0, solvedCount: 0, acceptance: 0 }
+  problem.acceptanceRate = stats.acceptance || problem.acceptanceRate || 0
+  problem.totalSubmissions = stats.totalSubmissions
+  problem.solvedCount = stats.solvedCount
+
+  if (req.user?.id) {
+    try {
+      const solved = await Session.findOne({
+        participants: req.user.id,
+        problem: problem._id,
+        'testResults.allPassed': true,
+      }).select('_id').lean()
+      problem.solvedByMe = !!solved
+    } catch (_) {}
+  }
+
   res.json(problem)
 }
 
@@ -230,6 +248,54 @@ async function solveProblem(req, res) {
       await UserTrackProgress.bulkWrite(bulkOps);
     }
   }
+
+  // Create a solo session record so streak, heatmap, and acceptance stats work
+  const now = new Date();
+  const soloRoomId = `solo_${req.user.id}_${problem.slug}_${now.getTime()}`;
+  try {
+    const existingToday = await Session.findOne({
+      participants: req.user.id,
+      problem: problem._id,
+      'testResults.allPassed': true,
+      createdAt: { $gte: new Date(now.toISOString().split('T')[0]) },
+    });
+    if (!existingToday) {
+      await Session.create({
+        roomId: soloRoomId,
+        problem: problem._id,
+        problemSnapshot: { title: problem.title, difficulty: problem.difficulty, slug: problem.slug, tags: problem.tags },
+        participants: [req.user.id],
+        startTime: now,
+        endTime: now,
+        duration: 0,
+        status: 'completed',
+        testResults: { passed: 1, total: 1, allPassed: true },
+        finalLanguage: req.body.language || 'javascript',
+      });
+
+      // Update streak for this user
+      const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      const yesterday = new Date(today); yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+      const last = user.streakData?.lastSessionDate ? new Date(user.streakData.lastSessionDate).getTime() : null;
+      let cs = user.streakData?.currentStreak || 0;
+      let ls = user.streakData?.longestStreak || 0;
+      if (last === null) cs = 1;
+      else if (last === yesterday.getTime()) cs += 1;
+      else if (last !== today.getTime()) cs = 1;
+      if (cs > ls) ls = cs;
+      await User.updateOne({ _id: req.user.id }, { $set: { 'streakData.currentStreak': cs, 'streakData.longestStreak': ls, 'streakData.lastSessionDate': today } });
+    }
+  } catch (_) {}
+
+  // Update problem's cached acceptance rate
+  try {
+    const totalSessions = await Session.countDocuments({ problem: problem._id });
+    const passedSessions = await Session.countDocuments({ problem: problem._id, 'testResults.allPassed': true });
+    if (totalSessions > 0) {
+      problem.acceptanceRate = Math.round((passedSessions / totalSessions) * 100);
+      await problem.save();
+    }
+  } catch (_) {}
 
   res.json({ solved: true, problem: problem._id });
 }

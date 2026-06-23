@@ -5,9 +5,22 @@ const crypto = require('crypto');
 const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/User');
 const { signToken, signRefreshToken, verifyRefreshToken } = require('../utils/jwtUtils');
+const nodemailer = require('nodemailer');
 const { fail, ok: success } = require('../utils/httpResponse');
 const logger = require('../utils/logger');
-const { agenda } = require('../config/agenda');
+
+const mailTransporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: parseInt(process.env.SMTP_PORT || '587', 10),
+  secure: parseInt(process.env.SMTP_PORT || '587', 10) === 465,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
+});
 
 const googleClient = new OAuth2Client(
   process.env.GOOGLE_CLIENT_ID,
@@ -43,7 +56,8 @@ async function sendOTPEmail(user, otp) {
   if (process.env.NODE_ENV === 'development') {
     logger.info(`[DEV MODE] OTP for ${user.email}: ${otp}`);
   }
-  await agenda.now('send-email', {
+  await mailTransporter.sendMail({
+    from: process.env.SMTP_USER,
     to: user.email,
     subject: 'Your PeerCode Verification Code',
     html: `
@@ -62,20 +76,29 @@ async function register(req, res) {
   if (password.length < 8) return fail(res, 400, 'Password must be at least 8 characters');
 
   const existingUser = await User.findOne({ email });
-  if (existingUser) return fail(res, 409, 'Email already registered');
+  if (existingUser && existingUser.verified) return fail(res, 409, 'Email already registered');
 
   const passwordHash = await bcrypt.hash(password, 10);
   const otp = generateOTP();
   const otpExpires = new Date(Date.now() + 3 * 60 * 1000);
 
-  const user = await User.create({
-    username,
-    email,
-    passwordHash,
-    verified: false,
-    emailVerificationToken: otp,
-    emailVerificationExpires: otpExpires,
-  });
+  let user;
+  if (existingUser) {
+    existingUser.username = username;
+    existingUser.passwordHash = passwordHash;
+    existingUser.emailVerificationToken = otp;
+    existingUser.emailVerificationExpires = otpExpires;
+    user = await existingUser.save();
+  } else {
+    user = await User.create({
+      username,
+      email,
+      passwordHash,
+      verified: false,
+      emailVerificationToken: otp,
+      emailVerificationExpires: otpExpires,
+    });
+  }
 
   try {
     await sendOTPEmail(user, otp);

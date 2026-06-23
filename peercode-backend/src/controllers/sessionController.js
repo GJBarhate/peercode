@@ -92,12 +92,24 @@ async function getDebrief(req, res) {
   if (!isParticipant) {
     return fail(res, 403, 'You are not a participant in this session');
   }
-  if (!session.debrief) {
+  let debrief = null;
+  if (session.debrief) {
+    debrief = await AiDebrief.findById(session.debrief);
+  }
+  // Fallback: find by roomId + participant if session.debrief wasn't linked
+  if (!debrief) {
+    debrief = await AiDebrief.findOne({ roomId: session.roomId, generatedFor: req.user.id });
+  }
+  if (!debrief) {
+    debrief = await AiDebrief.findOne({ roomId: session.roomId });
+  }
+  if (!debrief) {
     return fail(res, 404, 'Debrief not found');
   }
-  const debrief = await AiDebrief.findById(session.debrief);
-  if (!debrief) {
-    return fail(res, 404, 'Debrief data not found');
+  // Link debrief to session for future lookups
+  if (!session.debrief) {
+    session.debrief = debrief._id;
+    session.save().catch(() => {});
   }
   // Merge debrief with session info for the frontend
   const merged = {

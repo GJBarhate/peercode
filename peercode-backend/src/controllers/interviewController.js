@@ -66,7 +66,7 @@ CRITICAL RULES:
 - ${difficultyMix}
 - Each question should be 2-4 sentences with enough context to answer.${exclusionBlock}
 
-${resume ? `Candidate Resume (personalize questions based on their experience):\n${resume}\n` : ''}
+${resume ? `Candidate Resume:\n${resume}\n\nIMPORTANT: At least 40% of questions MUST be directly based on the candidate's resume — ask about specific projects, technologies, roles, or experiences mentioned. Probe deeper into their claimed skills. Mix resume-based questions with general ${interviewType} questions.\n` : ''}
 ${jobDescription ? `Job Description (align questions with required skills):\n${jobDescription}\n` : ''}
 
 ${company ? `Target Company: ${company} — use their known interview style and focus areas.` : ''}
@@ -156,7 +156,7 @@ async function generateFeedback(req, res) {
   const user = req.user;
   if (!user) return fail(res, 401, 'Unauthorized');
 
-  const { questions, answers, evaluations, interviewType, company } = req.body;
+  const { questions, answers, evaluations, interviewType, company, resume } = req.body;
   if (!questions || !answers) return fail(res, 400, 'questions and answers are required');
 
   try {
@@ -170,7 +170,7 @@ async function generateFeedback(req, res) {
     }).join('\n\n---\n\n');
 
     const prompt = `You are a senior interviewer at ${company || 'a top tech company'}. Evaluate each answer carefully and provide comprehensive final feedback for this ${interviewType} interview.
-
+${resume ? `\nCandidate Resume:\n${resume}\nConsider the resume context when evaluating — did the candidate's answers align with their claimed experience? Note any gaps between resume claims and demonstrated knowledge.\n` : ''}
 Interview Transcript:
 ${qaPairs}
 

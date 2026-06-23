@@ -5,48 +5,94 @@ const { fail, ok: success } = require('../utils/httpResponse');
 const logger = require('../utils/logger');
 const { canUseFeature, incrementUsage, getUsageInfo } = require('../utils/subscription');
 
+function classifyGeminiError(err) {
+  if (err.status === 429 || err.message?.includes('429') || err.message?.includes('quota')) return 'quota_exceeded';
+  if (err._authError || err.message?.includes('key') || err.message?.includes('API_KEY')) return 'invalid_key';
+  return 'unknown';
+}
+
+// Tries the user's personal API key first (used exclusively, no pool mixing).
+// Only on failure does it fall back to PeerCode's shared key pool — and only
+// if the user still has site-quota remaining. The caller is told whether a
+// fallback happened so the frontend can notify the user.
+// Sends an error response and returns null, signaling to callers
+// that they must NOT write a second response (fail()/ok() return the
+// truthy Express response object, so callers can't rely on its return
+// value to detect "already responded" — they must check for `null`).
 async function checkUsageAndCall(req, res, feature, promptBuilder) {
   const user = req.user;
-  if (!user) return fail(res, 401, 'Unauthorized');
+  if (!user) { fail(res, 401, 'Unauthorized'); return null; }
 
   const userApiKey = req.headers['x-gemini-key'] || (user.apiKey || null);
-  const useOwnKey = !!userApiKey;
+  const prompt = promptBuilder(req.body);
 
-  if (!useOwnKey) {
+  let result;
+  let usedFallback = false;
+  let fallbackReason = null;
+
+  if (userApiKey) {
+    try {
+      result = await callGemini(prompt, userApiKey);
+    } catch (ownKeyErr) {
+      fallbackReason = classifyGeminiError(ownKeyErr);
+      logger.warn(`Gemini ${feature}: user's own key failed (${fallbackReason}), attempting site fallback`);
+
+      const check = canUseFeature(user, feature);
+      if (!check.allowed) {
+        const usageInfo = getUsageInfo(user);
+        const reasonText = fallbackReason === 'quota_exceeded'
+          ? 'Your Gemini API key has reached its quota'
+          : 'Your Gemini API key is invalid';
+        fail(res, 403, `${reasonText}, and your monthly ${feature} limit on PeerCode's shared key is also reached. Please upgrade or wait for your key's quota to reset.`, {
+          upgradeRequired: true,
+          usage: usageInfo,
+          feature,
+          ownKeyFailed: true,
+          fallbackReason,
+        });
+        return null;
+      }
+
+      try {
+        result = await callGemini(prompt, null);
+        usedFallback = true;
+        await incrementUsage(user, feature);
+      } catch (poolErr) {
+        logger.error(`Gemini ${feature} error (after own-key fallback):`, poolErr);
+        const finalErr = poolErr;
+        finalErr._rateLimit = classifyGeminiError(poolErr) === 'quota_exceeded';
+        finalErr._keyError = classifyGeminiError(poolErr) === 'invalid_key';
+        throw finalErr;
+      }
+    }
+  } else {
     const check = canUseFeature(user, feature);
     if (!check.allowed) {
       const usageInfo = getUsageInfo(user);
-      return fail(res, 403, `Monthly ${feature} limit reached`, { 
-        upgradeRequired: true, 
+      fail(res, 403, `Monthly ${feature} limit reached`, {
+        upgradeRequired: true,
         usage: usageInfo,
-        feature 
+        feature
       });
+      return null;
     }
-  }
-
-  try {
-    const prompt = promptBuilder(req.body);
-    const result = await callGemini(prompt, userApiKey);
-    
-    if (!result) {
-      return fail(res, 502, `Failed to ${feature === 'hints' ? 'generate hint' : 'analyze code'}. Please try again.`);
-    }
-
-    if (!useOwnKey) {
+    try {
+      result = await callGemini(prompt, null);
       await incrementUsage(user, feature);
+    } catch (err) {
+      logger.error(`Gemini ${feature} error:`, err);
+      err._rateLimit = classifyGeminiError(err) === 'quota_exceeded';
+      err._keyError = classifyGeminiError(err) === 'invalid_key';
+      throw err;
     }
-
-    return { result, useOwnKey, unlimited: useOwnKey };
-  } catch (err) {
-    logger.error(`Gemini ${feature} error:`, err);
-    // Preserve error type for differentiation upstream
-    if (err.message?.includes('429') || err.status === 429 || err.message?.includes('quota')) {
-      err._rateLimit = true;
-    } else if (err.message?.includes('key') || err.message?.includes('API_KEY')) {
-      err._keyError = true;
-    }
-    throw err;
   }
+
+  if (!result) {
+    fail(res, 502, `Failed to ${feature === 'hints' ? 'generate hint' : 'analyze code'}. Please try again.`);
+    return null;
+  }
+
+  return { result, useOwnKey: !!userApiKey, unlimited: !!userApiKey && !usedFallback, usedFallback, fallbackReason };
 }
 
 async function getHint(req, res) {
@@ -74,9 +120,9 @@ Be thorough and helpful - provide multiple paragraphs if needed to give real val
   try {
     const outcome = await checkUsageAndCall(req, res, 'hints', promptBuilder);
     if (!outcome) return; // response already sent (rate-limit / auth failure)
-    const { result: hint, unlimited } = outcome;
+    const { result: hint, unlimited, usedFallback, fallbackReason } = outcome;
     const usageInfo = getUsageInfo(req.user);
-    res.json({ hint, usage: usageInfo, unlimited });
+    res.json({ hint, usage: usageInfo, unlimited, usedFallback, fallbackReason });
   } catch (err) {
     if (err._rateLimit) {
       return fail(res, 429, 'Gemini quota exceeded. Use your own API key in Settings > Gemini Key, or wait for quota to reset.');
@@ -124,8 +170,8 @@ Be thorough and helpful. Explain WHY each issue matters and HOW to fix it.`;
   try {
     const outcome = await checkUsageAndCall(req, res, 'analyzes', promptBuilder);
     if (!outcome) return; // response already sent
-    const { result: analysis, unlimited } = outcome;
-    
+    const { result: analysis, unlimited, usedFallback, fallbackReason } = outcome;
+
     const sections = {
       timeComplexity: '',
       spaceComplexity: '',
@@ -140,7 +186,7 @@ Be thorough and helpful. Explain WHY each issue matters and HOW to fix it.`;
     if (spaceMatch) sections.spaceComplexity = spaceMatch[1].trim();
 
     const usageInfo = getUsageInfo(req.user);
-    res.json({ ...sections, usage: usageInfo, unlimited });
+    res.json({ ...sections, usage: usageInfo, unlimited, usedFallback, fallbackReason });
   } catch (err) {
     if (err._rateLimit) {
       return fail(res, 429, 'Gemini quota exceeded. Use your own API key in Settings > Gemini Key, or wait for quota to reset.');
@@ -152,52 +198,6 @@ Be thorough and helpful. Explain WHY each issue matters and HOW to fix it.`;
   }
 }
 
-async function generateQuestion(req, res) {
-  const { difficulty, topic } = req.body;
-  const user = req.user;
-
-  if (!difficulty || !topic) {
-    return fail(res, 400, 'difficulty and topic are required');
-  }
-
-  if (!user) return fail(res, 401, 'Unauthorized');
-
-  const userApiKey = req.headers['x-gemini-key'] || (user.apiKey || null);
-  const useOwnKey = !!userApiKey;
-
-  if (!useOwnKey) {
-    const check = canUseFeature(user, 'questions');
-    if (!check.allowed) {
-      const usageInfo = getUsageInfo(user);
-      return fail(res, 403, 'Monthly limit reached', { upgradeRequired: true, usage: usageInfo });
-    }
-  }
-
-  const prompt = `Generate a ${difficulty} difficulty DSA (Data Structures and Algorithms) coding interview problem on the topic of "${topic}".
-
-Include:
-1. A clear problem title
-2. Problem description with constraints
-3. 2 examples with input, output, and explanation
-4. Hints (without full solution)
-5. Expected time and space complexity
-
-Format the problem as a coding interview question similar to LeetCode style.`;
-
-  try {
-    const question = await callGemini(prompt, userApiKey);
-    if (!useOwnKey) await incrementUsage(user, 'questions');
-    const usageInfo = getUsageInfo(req.user);
-    res.json({ question, usage: usageInfo, unlimited: useOwnKey });
-  } catch (err) {
-    logger.error('Gemini question error:', err);
-    if (err.message?.includes('429') || err.message?.includes('quota')) {
-      return fail(res, 429, 'Gemini quota exceeded. Use your own API key in Settings > Gemini Key.');
-    }
-    return fail(res, 502, 'Failed to generate question. Please try again.');
-  }
-}
-
 async function getUsage(req, res) {
   const user = req.user;
   if (!user) return fail(res, 401, 'Unauthorized');
@@ -206,4 +206,4 @@ async function getUsage(req, res) {
   return success(res, usageInfo);
 }
 
-module.exports = { getHint, analyzeCode, generateQuestion, getUsage };
+module.exports = { getHint, analyzeCode, getUsage };

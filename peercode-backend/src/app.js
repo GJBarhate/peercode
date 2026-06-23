@@ -38,6 +38,7 @@ const ratingsRouter = require('./routes/ratings');
 const statsRouter = require('./routes/stats');
 const leaderboardRouter = require('./routes/leaderboard');
 const notificationsRouter = require('./routes/notifications');
+const contestRouter = require('./routes/contest');
 
 const app = express();
 
@@ -116,6 +117,7 @@ app.use('/api/ratings', apiLimiter, ratingsRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/leaderboard', leaderboardRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/contests', apiLimiter, contestRouter);
 
 // 404 handler
 app.use((req, res) => {

@@ -1,25 +1,73 @@
+/* ================================================================
+   PeerCode Design Tokens — 4-Theme System
+   Themes: light (default), dark, dawn (warm/sun), emerald (ocean/moon)
+
+   Architecture:
+   - :root            → Light theme (cool white)
+   - .dark            → Dark theme (deep navy)
+   - .dawn            → Dawn theme (warm cream/sun)
+   - .dark.emerald    → Emerald theme (deep ocean/forest)
+   ================================================================ */
+
+/* ── Light Theme (Default) ─────────────────────────── */
 :root {
   /* Backgrounds */
-  --color-bg-base:       #0A0B0F;
-  --color-bg-surface:    #111318;
-  --color-bg-elevated:   #1A1D25;
-  --color-bg-overlay:    #21252E;
+  --color-bg-base:       #F5F6FA;
+  --color-bg-surface:    #FFFFFF;
+  --color-bg-elevated:   #EDEEF3;
+  --color-bg-overlay:    #E2E4EB;
+  --color-bg-hover:      #E8E9F0;
+  --color-bg-input:      #F0F1F6;
+
+  /* RGB triplets so Tailwind's opacity modifiers (e.g. bg-bg-surface/80) work */
+  --color-bg-base-rgb:     245 246 250;
+  --color-bg-surface-rgb:  255 255 255;
+  --color-bg-elevated-rgb: 237 238 243;
+  --color-bg-overlay-rgb:  226 228 235;
+  --color-bg-hover-rgb:    232 233 240;
+  --color-bg-input-rgb:    240 241 246;
 
   /* Borders */
-  --color-border-subtle:  rgba(255,255,255,0.06);
-  --color-border-default: rgba(255,255,255,0.12);
-  --color-border-strong:  rgba(255,255,255,0.24);
+  --color-border-subtle:  rgba(15, 17, 23, 0.06);
+  --color-border-default: rgba(15, 17, 23, 0.13);
+  --color-border-strong:  rgba(15, 17, 23, 0.22);
 
   /* Brand */
   --color-brand:         #6366F1;
-  --color-brand-hover:   #818CF8;
-  --color-brand-accent:  #22D3EE;
+  --color-brand-hover:   #4F46E5;
+  --color-brand-muted:   rgba(99, 102, 241, 0.12);
+  --color-brand-accent:  #0891B2;
 
-  /* Semantic States */
-  --color-success:  #10B981;
-  --color-warning:  #F59E0B;
-  --color-error:    #EF4444;
-  --color-info:     #3B82F6;
+  /* Semantic */
+  --color-success:       #059669;
+  --color-success-muted: rgba(5, 150, 105, 0.10);
+  --color-warning:       #D97706;
+  --color-warning-muted: rgba(217, 119, 6, 0.10);
+  --color-error:         #DC2626;
+  --color-error-muted:   rgba(220, 38, 38, 0.10);
+  --color-info:          #2563EB;
+  --color-info-muted:    rgba(37, 99, 235, 0.10);
+
+  /* Text */
+  --color-text-primary:   #111318;
+  --color-text-secondary: #4B4D5A;
+  --color-text-muted:     #7E8090;
+  --color-text-on-brand:  #FFFFFF;
+
+  /* Elevation */
+  --shadow-sm:        0 1px 3px rgba(15, 17, 23, 0.07);
+  --shadow-md:        0 4px 16px rgba(15, 17, 23, 0.09);
+  --shadow-lg:        0 8px 32px rgba(15, 17, 23, 0.12);
+  --shadow-glow:      0 0 24px rgba(99, 102, 241, 0.18);
+  --shadow-glow-cyan: 0 0 20px rgba(8, 145, 178, 0.15);
+
+  /* Chart palette */
+  --color-chart-empty:   #E5E7EB;
+  --color-chart-grid:    #E5E7EB;
+  --color-chart-axis:    #9CA3AF;
+  --color-chart-tooltip-bg: #FFFFFF;
+  --color-chart-tooltip-border: #E5E7EB;
+  --color-chart-tooltip-text: #374151;
 
   /* Typography */
   --font-display: 'Cal Sans', 'Inter', sans-serif;
@@ -42,13 +90,6 @@
   --space-5: 20px;  --space-6: 24px;  --space-8: 32px;  --space-10: 40px;
   --space-12: 48px; --space-16: 64px; --space-20: 80px;
 
-  /* Elevation */
-  --shadow-sm:        0 1px 3px rgba(0,0,0,0.4);
-  --shadow-md:        0 4px 16px rgba(0,0,0,0.5);
-  --shadow-lg:        0 8px 32px rgba(0,0,0,0.6);
-  --shadow-glow:      0 0 24px rgba(99,102,241,0.35);
-  --shadow-glow-cyan: 0 0 20px rgba(34,211,238,0.25);
-
   /* Border Radius */
   --radius-sm:   6px;  --radius-md: 10px;
   --radius-lg:  16px;  --radius-xl: 24px;  --radius-full: 9999px;
@@ -59,4 +100,160 @@
   --duration-slow:   350ms;
   --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ── Dark Theme ────────────────────────────────────── */
+.dark {
+  --color-bg-base:       #0A0B10;
+  --color-bg-surface:    #111318;
+  --color-bg-elevated:   #1A1D26;
+  --color-bg-overlay:    #22262F;
+  --color-bg-hover:      #1E2129;
+  --color-bg-input:      #15171E;
+
+  --color-bg-base-rgb:     10 11 16;
+  --color-bg-surface-rgb:  17 19 24;
+  --color-bg-elevated-rgb: 26 29 38;
+  --color-bg-overlay-rgb:  34 38 47;
+  --color-bg-hover-rgb:    30 33 41;
+  --color-bg-input-rgb:    21 23 30;
+
+  --color-border-subtle:  rgba(255, 255, 255, 0.06);
+  --color-border-default: rgba(255, 255, 255, 0.12);
+  --color-border-strong:  rgba(255, 255, 255, 0.22);
+
+  --color-brand-hover:   #818CF8;
+  --color-brand-muted:   rgba(99, 102, 241, 0.18);
+  --color-brand-accent:  #22D3EE;
+
+  --color-success:       #10B981;
+  --color-success-muted: rgba(16, 185, 129, 0.15);
+  --color-warning:       #F59E0B;
+  --color-warning-muted: rgba(245, 158, 11, 0.15);
+  --color-error:         #EF4444;
+  --color-error-muted:   rgba(239, 68, 68, 0.15);
+  --color-info:          #3B82F6;
+  --color-info-muted:    rgba(59, 130, 246, 0.15);
+
+  --color-text-primary:   #F0F0F5;
+  --color-text-secondary: #A0A0B2;
+  --color-text-muted:     #5A5A72;
+
+  --shadow-sm:        0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md:        0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg:        0 8px 32px rgba(0, 0, 0, 0.6);
+  --shadow-glow:      0 0 24px rgba(99, 102, 241, 0.35);
+  --shadow-glow-cyan: 0 0 20px rgba(34, 211, 238, 0.25);
+
+  --color-chart-empty:   #1F2937;
+  --color-chart-grid:    #374151;
+  --color-chart-axis:    #6B7280;
+  --color-chart-tooltip-bg: #111827;
+  --color-chart-tooltip-border: #374151;
+  --color-chart-tooltip-text: #D1D5DB;
+}
+
+/* ── Dawn Theme (Warm / Sun) ──────────────────────── */
+.dawn {
+  --color-bg-base:       #FDF6EE;
+  --color-bg-surface:    #FFFCF8;
+  --color-bg-elevated:   #F5EAD8;
+  --color-bg-overlay:    #EBDBC5;
+  --color-bg-hover:      #F0E4D0;
+  --color-bg-input:      #FAF2E8;
+
+  --color-bg-base-rgb:     253 246 238;
+  --color-bg-surface-rgb:  255 252 248;
+  --color-bg-elevated-rgb: 245 234 216;
+  --color-bg-overlay-rgb:  235 219 197;
+  --color-bg-hover-rgb:    240 228 208;
+  --color-bg-input-rgb:    250 242 232;
+
+  --color-border-subtle:  rgba(120, 80, 30, 0.08);
+  --color-border-default: rgba(120, 80, 30, 0.15);
+  --color-border-strong:  rgba(120, 80, 30, 0.25);
+
+  --color-brand:         #EA580C;
+  --color-brand-hover:   #C2410C;
+  --color-brand-muted:   rgba(234, 88, 12, 0.12);
+  --color-brand-accent:  #D97706;
+
+  --color-success:       #15803D;
+  --color-success-muted: rgba(21, 128, 61, 0.10);
+  --color-warning:       #B45309;
+  --color-warning-muted: rgba(180, 83, 9, 0.10);
+  --color-error:         #B91C1C;
+  --color-error-muted:   rgba(185, 28, 28, 0.10);
+  --color-info:          #1D4ED8;
+  --color-info-muted:    rgba(29, 78, 216, 0.10);
+
+  --color-text-primary:   #1C1410;
+  --color-text-secondary: #5C4A3A;
+  --color-text-muted:     #9C8878;
+  --color-text-on-brand:  #FFFFFF;
+
+  --shadow-sm:        0 1px 3px rgba(120, 80, 30, 0.06);
+  --shadow-md:        0 4px 16px rgba(120, 80, 30, 0.08);
+  --shadow-lg:        0 8px 32px rgba(120, 80, 30, 0.12);
+  --shadow-glow:      0 0 24px rgba(234, 88, 12, 0.18);
+  --shadow-glow-cyan: 0 0 20px rgba(217, 119, 6, 0.15);
+
+  --color-chart-empty:   #F0E4D0;
+  --color-chart-grid:    #E8D5BB;
+  --color-chart-axis:    #B09878;
+  --color-chart-tooltip-bg: #FFFCF8;
+  --color-chart-tooltip-border: #E8D5BB;
+  --color-chart-tooltip-text: #5C4A3A;
+}
+
+/* ── Emerald Theme (Ocean / Moon) ─────────────────── */
+.dark.emerald {
+  --color-bg-base:       #071210;
+  --color-bg-surface:    #0C1C18;
+  --color-bg-elevated:   #132A24;
+  --color-bg-overlay:    #1A3830;
+  --color-bg-hover:      #16302A;
+  --color-bg-input:      #0A1814;
+
+  --color-bg-base-rgb:     7 18 16;
+  --color-bg-surface-rgb:  12 28 24;
+  --color-bg-elevated-rgb: 19 42 36;
+  --color-bg-overlay-rgb:  26 56 48;
+  --color-bg-hover-rgb:    22 48 42;
+  --color-bg-input-rgb:    10 24 20;
+
+  --color-border-subtle:  rgba(110, 231, 183, 0.06);
+  --color-border-default: rgba(110, 231, 183, 0.13);
+  --color-border-strong:  rgba(110, 231, 183, 0.22);
+
+  --color-brand:         #10B981;
+  --color-brand-hover:   #34D399;
+  --color-brand-muted:   rgba(16, 185, 129, 0.18);
+  --color-brand-accent:  #14B8A6;
+
+  --color-success:       #34D399;
+  --color-success-muted: rgba(52, 211, 153, 0.15);
+  --color-warning:       #FBBF24;
+  --color-warning-muted: rgba(251, 191, 36, 0.15);
+  --color-error:         #F87171;
+  --color-error-muted:   rgba(248, 113, 113, 0.15);
+  --color-info:          #38BDF8;
+  --color-info-muted:    rgba(56, 189, 248, 0.15);
+
+  --color-text-primary:   #E8FFF5;
+  --color-text-secondary: #8CC8AD;
+  --color-text-muted:     #4E8872;
+
+  --shadow-sm:        0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-md:        0 4px 16px rgba(0, 0, 0, 0.55);
+  --shadow-lg:        0 8px 32px rgba(0, 0, 0, 0.65);
+  --shadow-glow:      0 0 24px rgba(16, 185, 129, 0.30);
+  --shadow-glow-cyan: 0 0 20px rgba(20, 184, 166, 0.25);
+
+  --color-chart-empty:   #132A24;
+  --color-chart-grid:    #1A3830;
+  --color-chart-axis:    #4E8872;
+  --color-chart-tooltip-bg: #0C1C18;
+  --color-chart-tooltip-border: #1A3830;
+  --color-chart-tooltip-text: #8CC8AD;
 }

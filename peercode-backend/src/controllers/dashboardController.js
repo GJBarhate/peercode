@@ -73,7 +73,8 @@ async function getDashboard(req, res) {
         currentStreak: streakData.currentStreak,
         longestStreak: streakData.longestStreak,
         activeDays: streakData.activeDays,
-        totalSessions: streakData.totalSessions
+        totalSessions: streakData.totalSessions,
+        monthlyStreakBadges: (user.monthlyStreakBadges || []).sort((a, b) => b.month.localeCompare(a.month)),
       },
       stats: {
         totalSessions,

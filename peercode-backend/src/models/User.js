@@ -62,6 +62,13 @@ const UserSchema = new mongoose.Schema(
       longestStreak: { type: Number, default: 0 },
       lastSessionDate: { type: Date, default: null },
     },
+    monthlyStreakBadges: {
+      type: [{
+        month: { type: String, required: true }, // 'YYYY-MM'
+        earnedAt: { type: Date, default: Date.now },
+      }],
+      default: [],
+    },
     isBanned: {
       type: Boolean,
       default: false,

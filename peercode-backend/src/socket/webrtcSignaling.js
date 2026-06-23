@@ -3,7 +3,10 @@
 const Room = require('../models/Room');
 const Problem = require('../models/Problem');
 const Session = require('../models/Session');
+const User = require('../models/User');
+const AiDebrief = require('../models/AiDebrief');
 const logger = require('../utils/logger');
+const { agenda } = require('../config/agenda');
 
 async function findRoom(roomId) {
   let room = null;
@@ -102,14 +105,17 @@ module.exports = function (io) {
           io.to(room.roomId).emit('room-updated', roomPayload);
         }
 
-        // Only notify others if this user wasn't already in the room
-        if (!alreadyInRoom) {
-          io.to(room.roomId).except(socket.id).emit('participant-joined', {
-            socketId: socket.id,
-            userId: socket.user.id,
-            username: socket.user.username || username,
-          });
-        }
+        // Always announce the new SOCKET to existing peers so a WebRTC
+        // connection can bootstrap — even if this user already has a
+        // participants record from another tab/device. `alreadyInRoom`
+        // only governs the Mongo dedup above; it must not gate the
+        // peer-connection handshake, otherwise two sessions of the same
+        // account (or a reconnect that raced the cleanup) never connect.
+        io.to(room.roomId).except(socket.id).emit('participant-joined', {
+          socketId: socket.id,
+          userId: socket.user.id,
+          username: socket.user.username || username,
+        });
       } catch (err) {
         logger.error('Join room error:', err);
         socket.emit('room-error', { error: 'Failed to join room', message: 'Failed to join room' });
@@ -184,30 +190,46 @@ module.exports = function (io) {
 
     socket.on('end-call', async (data) => {
       try {
-        const { roomId } = data || {};
-        if (!roomId) {
-          return;
-        }
+        const { roomId, finalCode, finalLanguage } = data || {};
+        if (!roomId) return;
 
         await Room.findOneAndUpdate({ roomId }, { $set: { status: 'completed' } });
 
         const session = await Session.findOne({ roomId });
-        if (session && !session.endTime) {
-          session.endTime = new Date();
-          session.duration = session.startTime
-            ? Math.max(0, Math.round((session.endTime - session.startTime) / 60000))
-            : 0;
+        if (session) {
+          if (!session.endTime) {
+            session.endTime = new Date();
+            session.duration = session.startTime
+              ? Math.max(0, Math.round((session.endTime - session.startTime) / 60000))
+              : 0;
+          }
+          session.status = 'completed';
+          if (finalCode) session.finalCode = finalCode;
+          if (finalLanguage) session.finalLanguage = finalLanguage;
           session.isRecording = false;
           await session.save();
+
+          // Queue AI debrief generation using all session participants
+          const participantIds = (session.participants || []).map(p => p.toString ? p.toString() : String(p));
+          if (participantIds.length > 0) {
+            try {
+              await agenda.now('ai-debrief', {
+                roomId,
+                participantIds,
+              });
+              logger.info(`Queued ai-debrief for room ${roomId} with ${participantIds.length} participants`);
+            } catch (jobErr) {
+              logger.error('Failed to queue debrief job:', jobErr.message);
+            }
+          }
         }
 
         socket.leave(roomId);
-        if (socket.currentRoom === roomId) {
-          socket.currentRoom = null;
-        }
+        if (socket.currentRoom === roomId) socket.currentRoom = null;
 
         io.to(roomId).emit('room-ended', {
           message: 'The session has ended',
+          sessionId: session?._id,
           timestamp: new Date(),
         });
       } catch (err) {

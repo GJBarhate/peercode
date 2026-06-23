@@ -66,7 +66,7 @@ module.exports = function defineSessionCompleteJob(agenda) {
         const duration = Math.round((now - new Date(startTime)) / 1000);
         await Session.findOneAndUpdate(
           { roomId },
-          { $set: { endTime: now, duration } }
+          { $set: { status: 'completed', endTime: now, duration } }
         );
       }
 

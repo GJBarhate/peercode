@@ -12,41 +12,41 @@ import ErrorBoundary from './components/common/ErrorBoundary'
 import './styles/globals.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <ErrorBoundary>
-      <HelmetProvider>
-      <BrowserRouter>
-        <AuthProvider>
-          <SocketProvider>
-            <GeminiProvider>
-              <ThemeProvider>
-                <App />
-                <Toaster
-                  position="bottom-right"
-                  toastOptions={{
-                    duration: 4000,
-                    style: {
-                      background: '#1f2937',
-                      color: '#f3f4f6',
-                      border: '1px solid #374151',
-                      borderRadius: '12px',
-                      fontSize: '14px',
-                      fontFamily: "'Outfit', sans-serif"
-                    },
-                    success: {
-                      iconTheme: { primary: '#22c55e', secondary: '#1f2937' }
-                    },
-                    error: {
-                      iconTheme: { primary: '#ef4444', secondary: '#1f2937' }
-                    }
-                  }}
-                />
-              </ThemeProvider>
-            </GeminiProvider>
-          </SocketProvider>
-        </AuthProvider>
-      </BrowserRouter>
-      </HelmetProvider>
-    </ErrorBoundary>
-  </React.StrictMode>
+ <React.StrictMode>
+ <ErrorBoundary>
+ <HelmetProvider>
+ <BrowserRouter>
+ <AuthProvider>
+ <SocketProvider>
+ <GeminiProvider>
+ <ThemeProvider>
+ <App />
+ <Toaster
+ position="bottom-right"
+ toastOptions={{
+ duration: 4000,
+ style: {
+ background: 'var(--color-bg-elevated)',
+ color: 'var(--color-text-primary)',
+ border: '1px solid var(--color-border-default)',
+ borderRadius: '12px',
+ fontSize: '14px',
+ fontFamily: "'Outfit', sans-serif"
+ },
+ success: {
+ iconTheme: { primary: '#22c55e', secondary: 'var(--color-bg-elevated)' }
+ },
+ error: {
+ iconTheme: { primary: '#ef4444', secondary: 'var(--color-bg-elevated)' }
+ }
+ }}
+ />
+ </ThemeProvider>
+ </GeminiProvider>
+ </SocketProvider>
+ </AuthProvider>
+ </BrowserRouter>
+ </HelmetProvider>
+ </ErrorBoundary>
+ </React.StrictMode>
 )

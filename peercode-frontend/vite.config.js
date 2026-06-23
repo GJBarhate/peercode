@@ -30,10 +30,26 @@ export default defineConfig({
             handler: 'CacheFirst',
             options: { cacheName: 'google-fonts-cache', expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 } },
           },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: { cacheName: 'google-fonts-webfonts', expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 } },
+          },
+          {
+            urlPattern: /\/api\/(problems|tracks)(\?.*)?$/i,
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'api-listings', expiration: { maxEntries: 50, maxAgeSeconds: 60 * 5 } },
+          },
         ],
       },
     }),
   ],
+  optimizeDeps: {
+    include: ['scrollparent', 'react-joyride'],
+  },
+  resolve: {
+    dedupe: ['react', 'react-dom'],
+  },
   server: {
     proxy: {
       '/api': {
@@ -51,6 +67,7 @@ export default defineConfig({
     drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : [],
   },
   build: {
+    target: 'es2020',
     rollupOptions: {
       output: {
         manualChunks: {

@@ -39,9 +39,10 @@ async function generateDebrief(req, res) {
     }
 
     // Check if debrief already exists and is recent (< 24 hours)
+    // Skip cache if the existing debrief is a fallback (Gemini failure)
     if (session.debrief) {
       const existingDebrief = await AiDebrief.findById(session.debrief);
-      if (existingDebrief && (Date.now() - existingDebrief.createdAt < 24 * 60 * 60 * 1000)) {
+      if (existingDebrief && !existingDebrief.isFallback && (Date.now() - existingDebrief.createdAt < 24 * 60 * 60 * 1000)) {
         return success(res, existingDebrief, 'Debrief retrieved from cache');
       }
     }
@@ -103,7 +104,7 @@ Return ONLY valid JSON (no markdown, no extra text) with this exact structure:
       const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || 'gemini-1.5-flash' });
 
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Gemini timeout')), 30000)
+        setTimeout(() => reject(new Error('Gemini timeout')), 60000)
       );
 
       const generatePromise = model.generateContent(prompt);
@@ -169,18 +170,19 @@ Return ONLY valid JSON (no markdown, no extra text) with this exact structure:
     } catch (geminiErr) {
       logger.error('Gemini API error:', geminiErr);
       
-      // Return a fallback debrief if Gemini fails
+      // Return a fallback debrief marked so it can be retried
       const fallbackDebrief = {
         sessionId: sessionId,
         roomId: session.roomId || '',
         generatedFor: userId,
-        summary: 'AI debrief service temporarily unavailable. Please try again later.',
-        scores: { communication: 2, decomposition: 2, codeQuality: 2, complexity: 2 },
-        overallReadiness: 4,
-        whatWentWell: ['Completed attempt'],
-        areasToImprove: ['Unable to analyze - please retry'],
-        studyNext: ['Try generating debrief again'],
-        weakTopics: ['Unable to assess']
+        isFallback: true,
+        summary: 'AI analysis is taking longer than expected. Click "Check Now" to retry.',
+        scores: { communication: 3, decomposition: 3, codeQuality: 3, complexity: 3 },
+        overallReadiness: 5,
+        whatWentWell: ['Completed the coding attempt'],
+        areasToImprove: ['AI analysis pending — please retry'],
+        studyNext: ['Retry debrief generation for full analysis'],
+        weakTopics: []
       };
 
       const aiDebrief = new AiDebrief(fallbackDebrief);
@@ -188,7 +190,7 @@ Return ONLY valid JSON (no markdown, no extra text) with this exact structure:
       session.debrief = aiDebrief._id;
       await session.save();
 
-      return success(res, aiDebrief, 'Debrief generated (fallback)');
+      return success(res, aiDebrief, 'Debrief generated (fallback — retry available)');
     }
   } catch (err) {
     logger.error('Generate debrief error:', err);
