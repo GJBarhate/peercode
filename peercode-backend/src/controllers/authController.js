@@ -6,10 +6,12 @@ const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/User');
 const { signToken, signRefreshToken, verifyRefreshToken } = require('../utils/jwtUtils');
 const nodemailer = require('nodemailer');
+const sgMail = require('@sendgrid/mail');
 const { fail, ok: success } = require('../utils/httpResponse');
 const logger = require('../utils/logger');
 
 let mailTransporter;
+let useSendGrid = false;
 try {
   const smtpHost = process.env.SMTP_HOST;
   const smtpUser = process.env.SMTP_USER;
@@ -18,6 +20,11 @@ try {
 
   if (!smtpHost || !smtpUser || !smtpPass) {
     logger.warn(`SMTP not configured — OTP emails disabled. Missing: ${[!smtpHost && 'SMTP_HOST', !smtpUser && 'SMTP_USER', !smtpPass && 'SMTP_PASS'].filter(Boolean).join(', ')}`);
+  } else if (smtpHost === 'smtp.sendgrid.net') {
+    // Use SendGrid Web API (HTTPS port 443 — never blocked by cloud providers)
+    sgMail.setApiKey(smtpPass);
+    useSendGrid = true;
+    logger.info(`SendGrid API configured for email sending`);
   } else {
     mailTransporter = nodemailer.createTransport({
       host: smtpHost,
@@ -68,6 +75,34 @@ function buildTokenPayload(user) {
 
 async function sendOTPEmail(user, otp) {
   logger.info(`[OTP] Verification code for ${user.email}: ${otp}`);
+  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@peercode.app';
+  
+  if (useSendGrid) {
+    try {
+      await sgMail.send({
+        to: user.email,
+        from: fromEmail,
+        subject: 'Your PeerCode Verification Code',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; background: #0f0f23; border-radius: 12px; color: #e2e8f0;">
+            <h2 style="color: #818cf8; margin: 0 0 16px;">PeerCode Verification</h2>
+            <p style="margin: 0 0 24px; color: #94a3b8;">Hi ${user.username},</p>
+            <div style="text-align: center; padding: 24px; background: #1e1e3f; border-radius: 8px; margin: 0 0 24px;">
+              <span style="font-size: 32px; letter-spacing: 8px; font-weight: bold; color: #818cf8;">${otp}</span>
+            </div>
+            <p style="margin: 0 0 8px; color: #94a3b8; font-size: 14px;">This code expires in 3 minutes.</p>
+            <p style="margin: 0; color: #64748b; font-size: 12px;">If you didn't request this code, you can safely ignore this email.</p>
+          </div>
+        `,
+      });
+      logger.info(`OTP email sent to ${user.email} via SendGrid`);
+    } catch (err) {
+      logger.error(`Failed to send OTP via SendGrid to ${user.email}: ${err.message}`);
+      if (err.response?.body) logger.error('SendGrid response:', JSON.stringify(err.response.body));
+    }
+    return;
+  }
+
   if (!mailTransporter) {
     logger.error('SMTP not configured — set SMTP_HOST, SMTP_USER, SMTP_PASS in .env');
     return;
