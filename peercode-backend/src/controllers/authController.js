@@ -74,7 +74,7 @@ async function sendOTPEmail(user, otp) {
   }
   try {
     await mailTransporter.sendMail({
-      from: `"PeerCode" <${process.env.SMTP_USER}>`,
+      from: `"PeerCode" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
       to: user.email,
       subject: 'Your PeerCode Verification Code',
       html: `
