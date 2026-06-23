@@ -84,7 +84,7 @@ export default function HomePage() {
   } else if (err.response?.status === 401 || err.response?.status === 400) {
  toast.error('Invalid credentials')
  } else if (err.response?.status === 409) {
- toast.error('Email already registered')
+ toast.error(err.response?.data?.message || err.response?.data?.error || 'Email already registered')
  } else {
  toast.error(errorMsg)
  }
